@@ -4,6 +4,8 @@ struct StatusSection: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var gpuStresser: GPUStresser
+    @ObservedObject var aneStresser: ANEStresser
     @ObservedObject var charging: ChargingController
     @ObservedObject var system: SystemMonitor
 
@@ -59,6 +61,28 @@ struct StatusSection: View {
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.red)
+            }
+
+            HStack {
+                Text("GPU:")
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(gpuStresser.isRunning ? .green : .secondary)
+                        .frame(width: 8, height: 8)
+                    Text(gpuStresser.isRunning ? gpuStresser.status : "Off")
+                        .fontWeight(.medium)
+                        .foregroundColor(gpuStresser.isRunning ? .green : .secondary)
+                }
+                Spacer()
+                Text("ANE:")
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(aneStresser.isRunning ? .green : .secondary)
+                        .frame(width: 8, height: 8)
+                    Text(aneStresser.isRunning ? aneStresser.status : "Off")
+                        .fontWeight(.medium)
+                        .foregroundColor(aneStresser.isRunning ? .green : .secondary)
+                }
             }
 
             HStack {

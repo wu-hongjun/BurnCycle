@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "BatteryBurner",
             path: "BatteryBurner",
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "Assets.xcassets"],
             linkerSettings: [
                 .linkedFramework("IOKit")
             ]

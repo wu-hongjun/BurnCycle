@@ -5,6 +5,8 @@ struct BatteryBurnerApp: App {
     @StateObject private var battery = BatteryMonitor()
     @StateObject private var charging = ChargingController()
     @StateObject private var mining = MiningManager()
+    @StateObject private var gpuStresser = GPUStresser()
+    @StateObject private var aneStresser = ANEStresser()
     @StateObject private var settings = AppSettings()
     @StateObject private var system = SystemMonitor()
     @State private var engine: CycleEngine?
@@ -18,6 +20,8 @@ struct BatteryBurnerApp: App {
                     battery: battery,
                     engine: engine,
                     mining: mining,
+                    gpuStresser: gpuStresser,
+                    aneStresser: aneStresser,
                     charging: charging,
                     system: system,
                     settings: settings,
@@ -30,6 +34,8 @@ struct BatteryBurnerApp: App {
                             battery: battery,
                             charging: charging,
                             mining: mining,
+                            gpuStresser: gpuStresser,
+                            aneStresser: aneStresser,
                             settings: settings
                         )
                         engine = eng
@@ -38,6 +44,6 @@ struct BatteryBurnerApp: App {
             }
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 360, height: 500)
+        .defaultSize(width: 360, height: 600)
     }
 }

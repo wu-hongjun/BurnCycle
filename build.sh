@@ -15,6 +15,18 @@ mkdir -p "$RESOURCES_DIR"
 cp .build/release/BatteryBurner "$APP_DIR/BatteryBurner"
 cp BatteryBurner/Info.plist "../BatteryBurner.app/Contents/Info.plist"
 
+# Compile asset catalog (app icon)
+if [ -d "BatteryBurner/Assets.xcassets" ]; then
+    echo "Compiling asset catalog..."
+    actool BatteryBurner/Assets.xcassets \
+        --compile "$RESOURCES_DIR" \
+        --platform macosx \
+        --minimum-deployment-target 14.0 \
+        --app-icon AppIcon \
+        --output-partial-info-plist /tmp/bb_assets_info.plist \
+        2>/dev/null || echo "Warning: actool failed, icon may not appear"
+fi
+
 echo "Built BatteryBurner.app successfully!"
 echo ""
 echo "To run: open ../BatteryBurner.app"

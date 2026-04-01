@@ -17,14 +17,19 @@ final class CycleEngine: ObservableObject {
     private let battery: BatteryMonitor
     private let charging: ChargingController
     private let mining: MiningManager
+    private let gpuStresser: GPUStresser
+    private let aneStresser: ANEStresser
     private let settings: AppSettings
 
     private var timer: Timer?
 
-    init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager, settings: AppSettings) {
+    init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
+         gpuStresser: GPUStresser, aneStresser: ANEStresser, settings: AppSettings) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
+        self.gpuStresser = gpuStresser
+        self.aneStresser = aneStresser
         self.settings = settings
     }
 
@@ -50,14 +55,14 @@ final class CycleEngine: ObservableObject {
         isRunning = false
         timer?.invalidate()
         timer = nil
-        mining.stop()
+        stopAllStress()
         battery.stopMonitoring()
         state = .idle
     }
 
     func pause() {
         guard isRunning else { return }
-        mining.stop()
+        stopAllStress()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .paused
     }
@@ -91,7 +96,7 @@ final class CycleEngine: ObservableObject {
     }
 
     private func transitionToCharging() {
-        mining.stop()
+        stopAllStress()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
     }
@@ -99,18 +104,33 @@ final class CycleEngine: ObservableObject {
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
-        guard !settings.walletAddress.isEmpty else {
-            state = .draining
-            return
+        // Start xmrig CPU mining
+        if !settings.walletAddress.isEmpty {
+            mining.start(
+                xmrigPath: settings.xmrigPath,
+                poolURL: settings.poolURL,
+                wallet: settings.walletAddress,
+                threads: settings.threadCount,
+                useGPU: settings.useGPU
+            )
         }
 
-        mining.start(
-            xmrigPath: settings.xmrigPath,
-            poolURL: settings.poolURL,
-            wallet: settings.walletAddress,
-            threads: settings.threadCount,
-            useGPU: settings.useGPU
-        )
+        // Start native GPU stress
+        if settings.useNativeGPU {
+            gpuStresser.start()
+        }
+
+        // Start ANE/AMX stress
+        if settings.useANE {
+            aneStresser.start()
+        }
+
         state = .draining
+    }
+
+    private func stopAllStress() {
+        mining.stop()
+        gpuStresser.stop()
+        aneStresser.stop()
     }
 }
