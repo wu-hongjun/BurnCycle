@@ -3,6 +3,7 @@ import SwiftUI
 struct ControlsSection: View {
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var nativeMiner: NativeMiner
     @ObservedObject var gpuStresser: GPUStresser
     @ObservedObject var aneStresser: ANEStresser
     @ObservedObject var settings: AppSettings
@@ -35,7 +36,27 @@ struct ControlsSection: View {
             }
 
             HStack(spacing: 8) {
-                Button(mining.isMining ? "Stop XMR" : "Test XMR") {
+                // Native miner test
+                Button(nativeMiner.isRunning ? "Stop Native" : "Test Native") {
+                    if nativeMiner.isRunning {
+                        nativeMiner.stop()
+                    } else {
+                        nativeMiner.start(
+                            poolURL: settings.poolURL,
+                            wallet: settings.walletAddress,
+                            threads: settings.threadCount,
+                            useGPU: settings.useNativeGPU,
+                            useANE: settings.useANE
+                        )
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(nativeMiner.isRunning ? .orange : .mint)
+                .controlSize(.small)
+                .disabled(settings.walletAddress.isEmpty)
+
+                // xmrig test
+                Button(mining.isMining ? "Stop xmrig" : "Test xmrig") {
                     if mining.isMining {
                         mining.stop()
                     } else {
@@ -53,6 +74,7 @@ struct ControlsSection: View {
                 .controlSize(.small)
                 .disabled(settings.walletAddress.isEmpty)
 
+                // GPU test
                 Button(gpuStresser.isRunning ? "Stop GPU" : "Test GPU") {
                     if gpuStresser.isRunning {
                         gpuStresser.stop()
@@ -64,6 +86,7 @@ struct ControlsSection: View {
                 .tint(gpuStresser.isRunning ? .orange : .purple)
                 .controlSize(.small)
 
+                // ANE test
                 Button(aneStresser.isRunning ? "Stop ANE" : "Test ANE") {
                     if aneStresser.isRunning {
                         aneStresser.stop()

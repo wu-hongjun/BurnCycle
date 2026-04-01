@@ -4,6 +4,7 @@ struct PopoverView: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var nativeMiner: NativeMiner
     @ObservedObject var gpuStresser: GPUStresser
     @ObservedObject var aneStresser: ANEStresser
     @ObservedObject var charging: ChargingController
@@ -14,12 +15,12 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             StatusSection(battery: battery, engine: engine, mining: mining,
-                         gpuStresser: gpuStresser, aneStresser: aneStresser,
-                         charging: charging, system: system)
+                         nativeMiner: nativeMiner, gpuStresser: gpuStresser,
+                         aneStresser: aneStresser, charging: charging, system: system)
 
             Divider()
 
-            ControlsSection(engine: engine, mining: mining,
+            ControlsSection(engine: engine, mining: mining, nativeMiner: nativeMiner,
                           gpuStresser: gpuStresser, aneStresser: aneStresser,
                           settings: settings)
 

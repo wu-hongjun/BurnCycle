@@ -41,6 +41,7 @@ struct SettingsSection: View {
                     ), in: 1...Double(maxThreads), step: 1)
                 }
 
+                Toggle("Native Miner (CPU+GPU+ANE)", isOn: $settings.useNativeMiner)
                 Toggle("xmrig GPU (OpenCL)", isOn: $settings.useGPU)
                 Toggle("Native GPU (Metal)", isOn: $settings.useNativeGPU)
                 Toggle("ANE/AMX Stress", isOn: $settings.useANE)

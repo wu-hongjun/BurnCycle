@@ -4,6 +4,7 @@ struct StatusSection: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var nativeMiner: NativeMiner
     @ObservedObject var gpuStresser: GPUStresser
     @ObservedObject var aneStresser: ANEStresser
     @ObservedObject var charging: ChargingController
@@ -46,14 +47,20 @@ struct StatusSection: View {
                         .frame(width: 16, height: 16)
                 }
                 Spacer()
-                Text("Mining:")
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(mining.isMining ? .green : .secondary)
-                        .frame(width: 8, height: 8)
-                    Text(mining.isMining ? (mining.hashrate != "0 H/s" ? mining.hashrate : mining.status) : "Off")
+                // Show active miner status
+                if nativeMiner.isRunning {
+                    Text("Native:")
+                    Text(nativeMiner.hashrate != "0 H/s" ? nativeMiner.hashrate : nativeMiner.status)
                         .fontWeight(.medium)
-                        .foregroundColor(mining.isMining ? .green : .secondary)
+                        .foregroundColor(.green)
+                } else if mining.isMining {
+                    Text("xmrig:")
+                    Text(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                } else {
+                    Text("Mining: Off")
+                        .foregroundColor(.secondary)
                 }
             }
 
@@ -93,6 +100,15 @@ struct StatusSection: View {
                 Text("Draw:")
                 Text(String(format: "%.1f W", system.powerWatts))
                     .fontWeight(.medium)
+            }
+
+            if nativeMiner.sharesFound > 0 {
+                HStack {
+                    Text("Shares:")
+                    Text("\(nativeMiner.sharesFound)")
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                }
             }
 
             if engine.cycleCount > 0 {

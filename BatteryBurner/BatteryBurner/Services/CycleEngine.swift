@@ -17,6 +17,7 @@ final class CycleEngine: ObservableObject {
     private let battery: BatteryMonitor
     private let charging: ChargingController
     private let mining: MiningManager
+    private let nativeMiner: NativeMiner
     private let gpuStresser: GPUStresser
     private let aneStresser: ANEStresser
     private let settings: AppSettings
@@ -24,10 +25,11 @@ final class CycleEngine: ObservableObject {
     private var timer: Timer?
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
-         gpuStresser: GPUStresser, aneStresser: ANEStresser, settings: AppSettings) {
+         nativeMiner: NativeMiner, gpuStresser: GPUStresser, aneStresser: ANEStresser, settings: AppSettings) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
+        self.nativeMiner = nativeMiner
         self.gpuStresser = gpuStresser
         self.aneStresser = aneStresser
         self.settings = settings
@@ -104,8 +106,22 @@ final class CycleEngine: ObservableObject {
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
-        // Start xmrig CPU mining
-        if !settings.walletAddress.isEmpty {
+        guard !settings.walletAddress.isEmpty else {
+            state = .draining
+            return
+        }
+
+        if settings.useNativeMiner {
+            // Native miner: CPU (RandomX) + Metal GPU + ANE
+            nativeMiner.start(
+                poolURL: settings.poolURL,
+                wallet: settings.walletAddress,
+                threads: settings.threadCount,
+                useGPU: settings.useNativeGPU,
+                useANE: settings.useANE
+            )
+        } else {
+            // xmrig fallback: CPU + OpenCL GPU
             mining.start(
                 xmrigPath: settings.xmrigPath,
                 poolURL: settings.poolURL,
@@ -113,16 +129,9 @@ final class CycleEngine: ObservableObject {
                 threads: settings.threadCount,
                 useGPU: settings.useGPU
             )
-        }
-
-        // Start native GPU stress
-        if settings.useNativeGPU {
-            gpuStresser.start()
-        }
-
-        // Start ANE/AMX stress
-        if settings.useANE {
-            aneStresser.start()
+            // Start native GPU/ANE stress alongside xmrig
+            if settings.useNativeGPU { gpuStresser.start() }
+            if settings.useANE { aneStresser.start() }
         }
 
         state = .draining
@@ -130,6 +139,7 @@ final class CycleEngine: ObservableObject {
 
     private func stopAllStress() {
         mining.stop()
+        nativeMiner.stop()
         gpuStresser.stop()
         aneStresser.stop()
     }

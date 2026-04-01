@@ -10,16 +10,18 @@ struct BatteryBurnerApp: App {
     @StateObject private var settings = AppSettings()
     @StateObject private var system = SystemMonitor()
     @State private var engine: CycleEngine?
+    @State private var nativeMiner: NativeMiner?
 
     private let maxThreads = ProcessInfo.processInfo.processorCount
 
     var body: some Scene {
         WindowGroup {
-            if let engine = engine {
+            if let engine = engine, let nativeMiner = nativeMiner {
                 PopoverView(
                     battery: battery,
                     engine: engine,
                     mining: mining,
+                    nativeMiner: nativeMiner,
                     gpuStresser: gpuStresser,
                     aneStresser: aneStresser,
                     charging: charging,
@@ -30,10 +32,13 @@ struct BatteryBurnerApp: App {
             } else {
                 ProgressView()
                     .onAppear {
+                        let nm = NativeMiner(gpuStresser: gpuStresser, aneStresser: aneStresser)
+                        nativeMiner = nm
                         let eng = CycleEngine(
                             battery: battery,
                             charging: charging,
                             mining: mining,
+                            nativeMiner: nm,
                             gpuStresser: gpuStresser,
                             aneStresser: aneStresser,
                             settings: settings
