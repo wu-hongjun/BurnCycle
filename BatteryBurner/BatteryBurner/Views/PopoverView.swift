@@ -4,12 +4,13 @@ struct PopoverView: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var charging: ChargingController
     @ObservedObject var settings: AppSettings
     let maxThreads: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            StatusSection(battery: battery, engine: engine, mining: mining)
+            StatusSection(battery: battery, engine: engine, mining: mining, charging: charging)
 
             Divider()
 
@@ -17,7 +18,7 @@ struct PopoverView: View {
 
             Divider()
 
-            SettingsSection(settings: settings, maxThreads: maxThreads)
+            SettingsSection(settings: settings, charging: charging, maxThreads: maxThreads)
 
             Divider()
 

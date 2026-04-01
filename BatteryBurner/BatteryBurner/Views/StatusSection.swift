@@ -4,6 +4,7 @@ struct StatusSection: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var charging: ChargingController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -24,6 +25,29 @@ struct StatusSection: View {
                 Text(engine.state.rawValue)
                     .fontWeight(.semibold)
                     .foregroundColor(stateColor)
+            }
+
+            HStack {
+                Text("Outlet:")
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(charging.outletOn ? .green : .red)
+                        .frame(width: 8, height: 8)
+                    Text(charging.outletOn ? "ON (Charging)" : "OFF (On Battery)")
+                        .fontWeight(.medium)
+                        .foregroundColor(charging.outletOn ? .green : .orange)
+                }
+                if charging.isRunningShortcut {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 16, height: 16)
+                }
+            }
+
+            if let error = charging.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
             }
 
             if mining.isMining {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsSection: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var charging: ChargingController
     let maxThreads: Int
 
     var body: some View {
@@ -43,13 +44,31 @@ struct SettingsSection: View {
                 Divider()
 
                 VStack(alignment: .leading) {
-                    Text("Start Charging Shortcut")
+                    HStack {
+                        Text("Start Charging Shortcut")
+                        Spacer()
+                        Button("Test") {
+                            charging.testStartCharging(shortcutName: settings.startChargingShortcut)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(charging.isRunningShortcut)
+                    }
                     TextField("Shortcut name", text: $settings.startChargingShortcut)
                         .textFieldStyle(.roundedBorder)
                 }
 
                 VStack(alignment: .leading) {
-                    Text("Stop Charging Shortcut")
+                    HStack {
+                        Text("Stop Charging Shortcut")
+                        Spacer()
+                        Button("Test") {
+                            charging.testStopCharging(shortcutName: settings.stopChargingShortcut)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(charging.isRunningShortcut)
+                    }
                     TextField("Shortcut name", text: $settings.stopChargingShortcut)
                         .textFieldStyle(.roundedBorder)
                 }

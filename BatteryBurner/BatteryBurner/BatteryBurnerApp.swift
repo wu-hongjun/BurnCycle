@@ -11,12 +11,13 @@ struct BatteryBurnerApp: App {
     private let maxThreads = ProcessInfo.processInfo.processorCount
 
     var body: some Scene {
-        MenuBarExtra("Battery Burner", systemImage: menuBarIcon) {
+        WindowGroup {
             if let engine = engine {
                 PopoverView(
                     battery: battery,
                     engine: engine,
                     mining: mining,
+                    charging: charging,
                     settings: settings,
                     maxThreads: maxThreads
                 )
@@ -33,16 +34,7 @@ struct BatteryBurnerApp: App {
                     }
             }
         }
-        .menuBarExtraStyle(.window)
-    }
-
-    private var menuBarIcon: String {
-        guard let engine = engine else { return "battery.100" }
-        switch engine.state {
-        case .charging: return "battery.100.bolt"
-        case .draining: return "battery.50"
-        case .paused: return "battery.75"
-        case .idle: return "battery.100"
-        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 360, height: 500)
     }
 }
