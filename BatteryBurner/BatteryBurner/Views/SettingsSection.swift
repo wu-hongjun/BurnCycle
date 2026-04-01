@@ -34,12 +34,14 @@ struct SettingsSection: View {
                 }
 
                 VStack(alignment: .leading) {
-                    Text("Threads: \(settings.threadCount)")
+                    Text("CPU Threads: \(settings.threadCount)")
                     Slider(value: Binding(
                         get: { Double(settings.threadCount) },
                         set: { settings.threadCount = Int($0) }
                     ), in: 1...Double(maxThreads), step: 1)
                 }
+
+                Toggle("Use GPU (OpenCL)", isOn: $settings.useGPU)
 
                 Divider()
 

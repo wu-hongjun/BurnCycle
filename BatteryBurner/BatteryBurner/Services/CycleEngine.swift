@@ -108,7 +108,8 @@ final class CycleEngine: ObservableObject {
             xmrigPath: settings.xmrigPath,
             poolURL: settings.poolURL,
             wallet: settings.walletAddress,
-            threads: settings.threadCount
+            threads: settings.threadCount,
+            useGPU: settings.useGPU
         )
         state = .draining
     }

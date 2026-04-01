@@ -11,7 +11,7 @@ final class MiningManager: ObservableObject {
     private var lastLogOffset: UInt64 = 0
     private let logPath = NSTemporaryDirectory() + "battery_burner_xmrig.log"
 
-    func start(xmrigPath: String, poolURL: String, wallet: String, threads: Int) {
+    func start(xmrigPath: String, poolURL: String, wallet: String, threads: Int, useGPU: Bool = true) {
         guard !isMining else { return }
 
         // Clear old log
@@ -27,7 +27,9 @@ final class MiningManager: ObservableObject {
             "--no-color",
             "--print-time", "5",
             "--tls",
-            "--log-file", logPath
+            "--coin", "monero",
+            "--log-file", logPath,
+            useGPU ? "--opencl" : "--no-opencl"
         ]
 
         proc.terminationHandler = { [weak self] _ in
@@ -104,10 +106,14 @@ final class MiningManager: ObservableObject {
                 status = "Mining"
             } else if line.contains("login") {
                 status = "Connecting..."
-            } else if line.contains("connect error") {
-                let msg = line.components(separatedBy: "connect error:").last?
-                    .trimmingCharacters(in: .whitespaces.union(.init(charactersIn: "\""))) ?? "Connection failed"
-                status = "Error: \(msg)"
+            } else if line.contains("connect error") || line.contains("login error") {
+                if line.contains("connect error") {
+                    let msg = line.components(separatedBy: "connect error:").last?
+                        .trimmingCharacters(in: .whitespaces.union(.init(charactersIn: "\""))) ?? "Connection failed"
+                    status = "Error: \(msg)"
+                } else {
+                    status = "Error: login failed"
+                }
             } else if line.contains("READY") {
                 status = "Ready"
             }

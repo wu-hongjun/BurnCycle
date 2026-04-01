@@ -49,7 +49,7 @@ struct StatusSection: View {
                     Circle()
                         .fill(mining.isMining ? .green : .secondary)
                         .frame(width: 8, height: 8)
-                    Text(mining.isMining ? "\(mining.hashrate) (\(mining.status))" : "Off")
+                    Text(mining.isMining ? (mining.hashrate != "0 H/s" ? mining.hashrate : mining.status) : "Off")
                         .fontWeight(.medium)
                         .foregroundColor(mining.isMining ? .green : .secondary)
                 }
