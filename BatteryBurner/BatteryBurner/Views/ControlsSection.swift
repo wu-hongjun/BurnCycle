@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ControlsSection: View {
     @ObservedObject var engine: CycleEngine
+    @ObservedObject var mining: MiningManager
+    @ObservedObject var settings: AppSettings
 
     var body: some View {
         HStack(spacing: 12) {
@@ -25,6 +27,24 @@ struct ControlsSection: View {
                 }
                 .buttonStyle(.bordered)
             }
+
+            Spacer()
+
+            Button(mining.isMining ? "Stop Mining" : "Test Mining") {
+                if mining.isMining {
+                    mining.stop()
+                } else {
+                    mining.start(
+                        xmrigPath: settings.xmrigPath,
+                        poolURL: settings.poolURL,
+                        wallet: settings.walletAddress,
+                        threads: settings.threadCount
+                    )
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(mining.isMining ? .orange : .blue)
+            .disabled(settings.walletAddress.isEmpty)
         }
     }
 }

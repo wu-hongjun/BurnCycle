@@ -5,6 +5,7 @@ struct StatusSection: View {
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
     @ObservedObject var charging: ChargingController
+    @ObservedObject var system: SystemMonitor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -33,7 +34,7 @@ struct StatusSection: View {
                     Circle()
                         .fill(charging.outletOn ? .green : .red)
                         .frame(width: 8, height: 8)
-                    Text(charging.outletOn ? "ON (Charging)" : "OFF (On Battery)")
+                    Text(charging.outletOn ? "ON" : "OFF")
                         .fontWeight(.medium)
                         .foregroundColor(charging.outletOn ? .green : .orange)
                 }
@@ -41,6 +42,16 @@ struct StatusSection: View {
                     ProgressView()
                         .scaleEffect(0.5)
                         .frame(width: 16, height: 16)
+                }
+                Spacer()
+                Text("Mining:")
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(mining.isMining ? .green : .secondary)
+                        .frame(width: 8, height: 8)
+                    Text(mining.isMining ? "\(mining.hashrate) (\(mining.status))" : "Off")
+                        .fontWeight(.medium)
+                        .foregroundColor(mining.isMining ? .green : .secondary)
                 }
             }
 
@@ -50,12 +61,14 @@ struct StatusSection: View {
                     .foregroundColor(.red)
             }
 
-            if mining.isMining {
-                HStack {
-                    Text("Hashrate:")
-                    Text(mining.hashrate)
-                        .fontWeight(.medium)
-                }
+            HStack {
+                Text("CPU:")
+                Text(String(format: "%.0f%%", system.cpuUsage))
+                    .fontWeight(.medium)
+                Spacer()
+                Text("Draw:")
+                Text(String(format: "%.1f W", system.powerWatts))
+                    .fontWeight(.medium)
             }
 
             if engine.cycleCount > 0 {
