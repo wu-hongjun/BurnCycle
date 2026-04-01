@@ -1,0 +1,8 @@
+# Build artifacts
+BatteryBurner.app/
+BatteryBurner/.build/
+.swiftpm/
+.omc/
+
+# macOS
+.DS_Store
