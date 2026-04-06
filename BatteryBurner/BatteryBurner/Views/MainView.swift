@@ -37,6 +37,7 @@ struct MainView: View {
                 }
                 Spacer()
                 Text("CPU \(String(format: "%.0f%%", system.cpuUsage))")
+                Text("GPU \(String(format: "%.0f%%", system.gpuUsage))")
                 if mining.isMining {
                     Label(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status,
                           systemImage: "cpu")

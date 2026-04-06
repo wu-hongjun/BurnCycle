@@ -4,6 +4,7 @@ import IOKit
 @MainActor
 final class SystemMonitor: ObservableObject {
     @Published var cpuUsage: Double = 0 // 0-100
+    @Published var gpuUsage: Double = 0 // 0-100
     @Published var powerWatts: Double = 0 // battery power draw in watts
 
     private var timer: Timer?
@@ -30,6 +31,7 @@ final class SystemMonitor: ObservableObject {
 
     func update() {
         updateCPU()
+        updateGPU()
         updatePower()
     }
 
@@ -65,6 +67,32 @@ final class SystemMonitor: ObservableObject {
         }
 
         return result == KERN_SUCCESS ? cpuLoadInfo : nil
+    }
+
+    // MARK: - GPU Usage via IOKit AGXAccelerator
+
+    private func updateGPU() {
+        var iterator: io_iterator_t = 0
+        let matching = IOServiceMatching("AGXAccelerator")
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return }
+        defer { IOObjectRelease(iterator) }
+
+        var service = IOIteratorNext(iterator)
+        while service != IO_OBJECT_NULL {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+
+            var props: Unmanaged<CFMutableDictionary>?
+            guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+                  let dict = props?.takeRetainedValue() as? [String: Any],
+                  let perfStats = dict["PerformanceStatistics"] as? [String: Any],
+                  let utilization = perfStats["Device Utilization %"] as? Int else { continue }
+
+            gpuUsage = Double(utilization)
+            return
+        }
     }
 
     // MARK: - Battery power draw via IOKit
