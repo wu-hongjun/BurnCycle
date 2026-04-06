@@ -27,6 +27,7 @@ struct BatteryBurnerApp: App {
                             battery: battery,
                             charging: charging,
                             mining: mining,
+                            system: system,
                             settings: settings
                         )
                         battery.update()

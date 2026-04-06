@@ -42,6 +42,9 @@ struct MainView: View {
                     Label(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status,
                           systemImage: "cpu")
                         .foregroundColor(.green)
+                } else if engine.miningThrottled {
+                    Label("Throttled", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.yellow)
                 }
             }
             .font(.caption)
