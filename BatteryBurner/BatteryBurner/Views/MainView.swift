@@ -8,82 +8,82 @@ struct MainView: View {
     @ObservedObject var system: SystemMonitor
     @ObservedObject var settings: AppSettings
 
+    @State private var showSettings = false
+
     var body: some View {
-        VStack(spacing: 12) {
-            // Line 1: Battery info — %, cycles, health, draw
-            HStack(spacing: 10) {
+        VStack(spacing: 10) {
+            // Row 1: Battery — percentage, health, cycles
+            HStack {
                 Label("\(battery.percentage)%", systemImage: batteryIcon)
                     .foregroundColor(batteryColor)
                     .fontWeight(.bold)
                 Spacer()
-                Label("\(battery.cycleCount)", systemImage: "arrow.triangle.2.circlepath")
                 Label("\(battery.healthPercent)%", systemImage: "heart.fill")
                     .foregroundColor(battery.healthPercent > 80 ? .green : battery.healthPercent > 50 ? .yellow : .red)
-                Text("\(String(format: "%.1f", system.powerWatts))W")
-                    .fontWeight(.medium)
+                Label("\(battery.cycleCount)", systemImage: "arrow.triangle.2.circlepath")
             }
             .font(.caption)
 
-            // Line 2: State, outlet, CPU, mining
-            HStack(spacing: 10) {
+            // Row 2: System — state, CPU, GPU, power
+            HStack {
                 Label(stateLabel, systemImage: stateIcon)
                     .foregroundColor(stateColor)
                     .fontWeight(.semibold)
-                Label(charging.outletOn ? "ON" : "OFF",
-                      systemImage: charging.outletOn ? "powerplug.fill" : "powerplug")
-                    .foregroundColor(charging.outletOn ? .green : .orange)
                 if charging.isRunningShortcut {
                     ProgressView().scaleEffect(0.5).frame(width: 12, height: 12)
                 }
                 Spacer()
                 Text("CPU \(String(format: "%.0f%%", system.cpuUsage))")
                 Text("GPU \(String(format: "%.0f%%", system.gpuUsage))")
-                if mining.isMining {
-                    Label(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status,
-                          systemImage: "cpu")
-                        .foregroundColor(.green)
-                } else if engine.miningThrottled {
-                    Label("Throttled", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(.yellow)
-                }
+                Text("\(String(format: "%.1f", system.powerWatts))W")
+                    .fontWeight(.medium)
             }
             .font(.caption)
             .foregroundColor(.secondary)
+
+            // Row 3: Mining status (if active)
+            if mining.isMining || engine.miningThrottled {
+                HStack {
+                    if mining.isMining {
+                        Label(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status,
+                              systemImage: "cpu")
+                            .foregroundColor(.green)
+                    } else if engine.miningThrottled {
+                        Label("Mining throttled (system busy)", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundColor(.yellow)
+                    }
+                    Spacer()
+                    if engine.cycleCount > 0 {
+                        Text("Cycles: \(engine.cycleCount)")
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
 
             if let error = charging.lastError {
                 Text(error).font(.caption2).foregroundColor(.red)
             }
 
-            // Controls
-            HStack(spacing: 12) {
+            // Controls: Settings, Start/Stop
+            HStack {
+                Button("Settings") {
+                    showSettings.toggle()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+
                 Button(engine.isRunning ? "Stop" : "Start") {
                     if engine.isRunning { engine.stop() } else { engine.start() }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(engine.isRunning ? .red : .green)
-
-                if engine.isRunning {
-                    Button(engine.state == .paused ? "Resume" : "Pause") {
-                        if engine.state == .paused { engine.resume() } else { engine.pause() }
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Spacer()
-
-                Toggle("Load", isOn: $settings.loadEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
             }
 
-            if engine.cycleCount > 0 {
-                Text("Burn cycles: \(engine.cycleCount)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            // Settings
-            DisclosureGroup("Settings") {
+            // Settings panel
+            if showSettings {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading) {
                         Text("Charge to: \(Int(settings.upperThreshold))%")
@@ -94,28 +94,32 @@ struct MainView: View {
                         Slider(value: $settings.lowerThreshold, in: 5...50, step: 5)
                     }
 
-                    // Mining info
-                    if mining.isMining {
-                        HStack {
-                            Text("Status: \(mining.status)")
-                            Spacer()
-                            Text(mining.hashrate)
-                                .fontWeight(.medium)
-                                .foregroundColor(.green)
-                        }
-                        .font(.caption)
-                    }
+                    // Load / Mining
+                    Toggle("Mine XMR while draining", isOn: $settings.loadEnabled)
 
-                    VStack(alignment: .leading) {
-                        Text("XMR Wallet (leave empty for default)")
+                    if settings.loadEnabled {
+                        if mining.isMining {
+                            HStack {
+                                Text("Mining: \(mining.status)")
+                                Spacer()
+                                Text(mining.hashrate).fontWeight(.medium).foregroundColor(.green)
+                            }
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                        TextField("Wallet address", text: $settings.walletAddress)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.caption, design: .monospaced))
+                        } else if engine.miningThrottled {
+                            Text("Mining paused — system busy (CPU/GPU > 80%)")
+                                .font(.caption).foregroundColor(.yellow)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("XMR Wallet (empty = default)")
+                                .font(.caption).foregroundColor(.secondary)
+                            TextField("Wallet address", text: $settings.walletAddress)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.caption, design: .monospaced))
+                        }
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text("Start Charging Shortcut")
                             Spacer()
@@ -140,24 +144,27 @@ struct MainView: View {
                         TextField("Shortcut name", text: $settings.stopChargingShortcut)
                             .textFieldStyle(.roundedBorder)
                     }
+
+                    HStack {
+                        Spacer()
+                        Button("Quit Battery Burner") {
+                            engine.stop()
+                            NSApplication.shared.terminate(nil)
+                        }
+                        .font(.caption).foregroundColor(.red)
+                        Spacer()
+                    }
                 }
+                .font(.callout)
                 .padding(.top, 4)
             }
-            .font(.callout)
-
-            Button("Quit") {
-                engine.stop()
-                NSApplication.shared.terminate(nil)
-            }
-            .font(.caption)
-            .foregroundColor(.secondary)
         }
-        .padding(20)
-        .frame(width: 340)
+        .padding(16)
+        .frame(width: 320)
     }
 
     private var batteryIcon: String {
-        if battery.isCharging { return "battery.100.bolt" }
+        if battery.isPluggedIn { return "battery.100.bolt" }
         if battery.percentage > 75 { return "battery.100" }
         if battery.percentage > 50 { return "battery.75" }
         if battery.percentage > 25 { return "battery.50" }
@@ -181,7 +188,6 @@ struct MainView: View {
         switch engine.state {
         case .charging: return .green
         case .draining: return .orange
-        case .paused: return .yellow
         case .idle: return .secondary
         }
     }
@@ -190,7 +196,6 @@ struct MainView: View {
         switch engine.state {
         case .charging: return "bolt.fill"
         case .draining: return "flame.fill"
-        case .paused: return "pause.circle.fill"
         case .idle: return "moon.fill"
         }
     }

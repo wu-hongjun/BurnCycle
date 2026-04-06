@@ -4,7 +4,6 @@ import Combine
 enum CycleState: String {
     case charging = "CHARGING"
     case draining = "DRAINING"
-    case paused = "PAUSED"
     case idle = "IDLE"
 }
 
@@ -78,24 +77,6 @@ final class CycleEngine: ObservableObject {
         state = .idle
     }
 
-    func pause() {
-        guard isRunning else { return }
-        mining.stop()
-        charging.startCharging(shortcutName: settings.startChargingShortcut)
-        miningThrottled = false
-        state = .paused
-    }
-
-    func resume() {
-        guard state == .paused else { return }
-        let pct = battery.percentage
-        if pct >= Int(settings.upperThreshold) {
-            transitionToDraining()
-        } else {
-            transitionToCharging()
-        }
-    }
-
     private func onLoadToggleChanged(_ enabled: Bool) {
         guard isRunning, state == .draining else { return }
         if enabled && !mining.isMining && isSystemLoadSafe() {
@@ -108,7 +89,7 @@ final class CycleEngine: ObservableObject {
     }
 
     private func tick() {
-        guard isRunning, state != .paused else { return }
+        guard isRunning else { return }
         battery.update()
         system.update()
 

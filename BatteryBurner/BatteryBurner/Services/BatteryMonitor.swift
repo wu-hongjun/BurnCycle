@@ -12,45 +12,88 @@ final class BatteryMonitor: ObservableObject {
     @Published var healthPercent: Int = 0
     @Published var chargerWatts: Int = 0
 
-    private var timer: Timer?
+    private var fastTimer: Timer?  // 5s — battery %, charging state, charger watts
+    private var slowTimer: Timer?  // 60s — cycle count, health (rarely changes)
 
     init() {
-        update()
+        updateFast()
+        updateSlow()
     }
 
     func startMonitoring() {
-        update()
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        updateFast()
+        fastTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.update()
+                self?.updateFast()
+            }
+        }
+        slowTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateSlow()
             }
         }
     }
 
     func stopMonitoring() {
-        timer?.invalidate()
-        timer = nil
+        fastTimer?.invalidate()
+        fastTimer = nil
+        slowTimer?.invalidate()
+        slowTimer = nil
     }
 
+    /// Called externally for immediate refresh (e.g. on cycle engine tick)
     func update() {
-        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
-              let source = sources.first,
-              let desc = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any] else {
+        updateFast()
+    }
+
+    // MARK: - Fast updates (5s) — battery %, power source, charger
+
+    private func updateFast() {
+        // Read battery percentage and charging state from IOPowerSources
+        if let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+           let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
+           let source = sources.first,
+           let desc = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any] {
+
+            if let capacity = desc[kIOPSCurrentCapacityKey] as? Int {
+                percentage = capacity
+            }
+            if let powerSource = desc[kIOPSPowerSourceStateKey] as? String {
+                isPluggedIn = (powerSource == kIOPSACPowerValue)
+            }
+            if let charging = desc[kIOPSIsChargingKey] as? Bool {
+                isCharging = charging
+            }
+        }
+
+        // Read charger wattage from AppleSmartBattery
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
+        guard service != IO_OBJECT_NULL else {
+            chargerWatts = 0
+            return
+        }
+        defer { IOObjectRelease(service) }
+
+        var props: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+              let dict = props?.takeRetainedValue() as? [String: Any] else {
+            chargerWatts = 0
             return
         }
 
-        if let capacity = desc[kIOPSCurrentCapacityKey] as? Int {
-            percentage = capacity
+        // Only show charger watts when actually plugged in
+        if isPluggedIn,
+           let adapter = dict["AdapterDetails"] as? [String: Any],
+           let watts = adapter["Watts"] as? Int {
+            chargerWatts = watts
+        } else {
+            chargerWatts = 0
         }
-        if let powerSource = desc[kIOPSPowerSourceStateKey] as? String {
-            isPluggedIn = (powerSource == kIOPSACPowerValue)
-        }
-        if let charging = desc[kIOPSIsChargingKey] as? Bool {
-            isCharging = charging
-        }
+    }
 
-        // Read cycle count and health from AppleSmartBattery
+    // MARK: - Slow updates (60s) — cycle count, health
+
+    private func updateSlow() {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
         guard service != IO_OBJECT_NULL else { return }
         defer { IOObjectRelease(service) }
@@ -62,14 +105,8 @@ final class BatteryMonitor: ObservableObject {
         if let cycles = dict["CycleCount"] as? Int {
             cycleCount = cycles
         }
-        if let adapter = dict["AdapterDetails"] as? [String: Any],
-           let watts = adapter["Watts"] as? Int {
-            chargerWatts = watts
-        } else {
-            chargerWatts = 0
-        }
 
-        // Read Maximum Capacity % from system_profiler (matches "About This Mac")
+        // Read health from system_profiler (matches "About This Mac") — only once
         if healthPercent == 0 {
             Task.detached {
                 let proc = Process()
