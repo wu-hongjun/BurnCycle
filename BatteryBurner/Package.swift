@@ -10,7 +10,8 @@ let package = Package(
             path: "BatteryBurner",
             exclude: ["Info.plist", "Assets.xcassets", "Resources"],
             linkerSettings: [
-                .linkedFramework("IOKit")
+                .linkedFramework("IOKit"),
+                .unsafeFlags(["-lIOReport"])
             ]
         )
     ]

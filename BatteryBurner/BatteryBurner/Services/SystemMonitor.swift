@@ -1,17 +1,48 @@
 import Foundation
 import IOKit
 
+// MARK: - IOReport private API declarations (used by mactop/asitop, no sudo needed)
+
+@_silgen_name("IOReportCopyChannelsInGroup")
+func IOReportCopyChannelsInGroup(_ group: CFString, _ subgroup: CFString?, _ a: UInt64, _ b: UInt64, _ c: UInt64) -> CFDictionary?
+
+@_silgen_name("IOReportCreateSubscription")
+func IOReportCreateSubscription(_ a: UnsafeMutableRawPointer?, _ channels: CFDictionary, _ b: UnsafeMutablePointer<Unmanaged<CFMutableDictionary>?>?, _ c: UInt64, _ d: UnsafeMutablePointer<CFTypeRef?>?) -> Unmanaged<CFTypeRef>?
+
+@_silgen_name("IOReportCreateSamples")
+func IOReportCreateSamples(_ subscription: CFTypeRef, _ a: CFTypeRef?, _ b: UnsafeMutablePointer<CFTypeRef?>?) -> Unmanaged<CFDictionary>?
+
+@_silgen_name("IOReportGetChannelCount")
+func IOReportGetChannelCount(_ channels: CFDictionary) -> Int
+
+@_silgen_name("IOReportChannelGetGroup")
+func IOReportChannelGetGroup(_ channel: CFDictionary) -> Unmanaged<CFString>
+
+@_silgen_name("IOReportChannelGetSubGroup")
+func IOReportChannelGetSubGroup(_ channel: CFDictionary) -> Unmanaged<CFString>
+
+@_silgen_name("IOReportSimpleGetIntegerValue")
+func IOReportSimpleGetIntegerValue(_ channel: CFDictionary, _ a: UnsafeMutablePointer<Int32>?) -> Int64
+
+@_silgen_name("IOReportChannelGetChannelName")
+func IOReportChannelGetChannelName(_ channel: CFDictionary) -> Unmanaged<CFString>
+
 @MainActor
 final class SystemMonitor: ObservableObject {
-    @Published var cpuUsage: Double = 0 // 0-100
-    @Published var gpuUsage: Double = 0 // 0-100
-    @Published var powerWatts: Double = 0 // battery power draw in watts
+    @Published var cpuUsage: Double = 0
+    @Published var gpuUsage: Double = 0
+    @Published var powerWatts: Double = 0
 
     private var timer: Timer?
     private var previousCPUInfo: host_cpu_load_info?
 
+    // IOReport GPU state
+    private var gpuSubscription: CFTypeRef?
+    private var previousGPUSample: CFDictionary?
+
     init() {
         previousCPUInfo = readCPUTicks()
+        setupGPUReport()
         update()
     }
 
@@ -69,9 +100,73 @@ final class SystemMonitor: ObservableObject {
         return result == KERN_SUCCESS ? cpuLoadInfo : nil
     }
 
-    // MARK: - GPU Usage via IOKit AGXAccelerator
+    // MARK: - GPU Usage via IOReport (same as mactop/asitop)
+
+    private func setupGPUReport() {
+        guard let channels = IOReportCopyChannelsInGroup("GPU" as CFString, nil, 0, 0, 0) else { return }
+
+        var subRef: CFTypeRef?
+        guard let subscription = IOReportCreateSubscription(nil, channels, nil, 0, &subRef),
+              let sub = subRef else { return }
+
+        let _ = subscription // retained by subRef
+        gpuSubscription = sub
+
+        // Take initial sample as baseline
+        if let sample = IOReportCreateSamples(sub, nil, nil) {
+            previousGPUSample = sample.takeRetainedValue()
+        }
+    }
 
     private func updateGPU() {
+        guard let sub = gpuSubscription,
+              let prevSample = previousGPUSample else {
+            // Fallback to PerformanceStatistics if IOReport unavailable
+            updateGPUFallback()
+            return
+        }
+
+        guard let currentSampleRef = IOReportCreateSamples(sub, nil, nil) else { return }
+        let currentSample = currentSampleRef.takeRetainedValue()
+        defer { previousGPUSample = currentSample }
+
+        // Delta between samples gives us time-weighted utilization
+        guard let prevItems = (prevSample as NSDictionary)["IOReportChannels"] as? [NSDictionary],
+              let currItems = (currentSample as NSDictionary)["IOReportChannels"] as? [NSDictionary] else {
+            updateGPUFallback()
+            return
+        }
+
+        var totalActive: Int64 = 0
+        var totalIdle: Int64 = 0
+
+        for i in 0..<min(prevItems.count, currItems.count) {
+            let prev = prevItems[i] as CFDictionary
+            let curr = currItems[i] as CFDictionary
+
+            let group = IOReportChannelGetGroup(curr).takeUnretainedValue() as String
+            guard group == "GPU" else { continue }
+
+            let subgroup = IOReportChannelGetSubGroup(curr).takeUnretainedValue() as String
+
+            let prevVal = IOReportSimpleGetIntegerValue(prev, nil)
+            let currVal = IOReportSimpleGetIntegerValue(curr, nil)
+            let delta = currVal - prevVal
+
+            if subgroup.contains("Active") || subgroup.contains("Busy") {
+                totalActive += delta
+            } else if subgroup.contains("Idle") || subgroup.contains("Off") {
+                totalIdle += delta
+            }
+        }
+
+        let total = totalActive + totalIdle
+        if total > 0 {
+            gpuUsage = Double(totalActive) / Double(total) * 100
+        }
+    }
+
+    private func updateGPUFallback() {
         var iterator: io_iterator_t = 0
         let matching = IOServiceMatching("AGXAccelerator")
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return }
@@ -109,7 +204,6 @@ final class SystemMonitor: ObservableObject {
         }
 
         if let voltage = dict["Voltage"] as? Int {
-            // Amperage may be stored as unsigned-wrapped negative (e.g. 18446744073709547277 = -4339)
             let amperage: Int64
             if let raw = dict["Amperage"] as? Int64 {
                 amperage = raw
