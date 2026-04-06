@@ -1,5 +1,0 @@
-module CRandomX {
-    header "include/randomx.h"
-    link "randomx"
-    export *
-}

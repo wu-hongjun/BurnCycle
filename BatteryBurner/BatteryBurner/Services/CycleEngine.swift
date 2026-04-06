@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 
 enum CycleState: String {
     case charging = "CHARGING"
@@ -17,21 +16,14 @@ final class CycleEngine: ObservableObject {
     private let battery: BatteryMonitor
     private let charging: ChargingController
     private let mining: MiningManager
-    private let nativeMiner: NativeMiner
-    private let gpuStresser: GPUStresser
-    private let aneStresser: ANEStresser
     private let settings: AppSettings
 
     private var timer: Timer?
 
-    init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
-         nativeMiner: NativeMiner, gpuStresser: GPUStresser, aneStresser: ANEStresser, settings: AppSettings) {
+    init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager, settings: AppSettings) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
-        self.nativeMiner = nativeMiner
-        self.gpuStresser = gpuStresser
-        self.aneStresser = aneStresser
         self.settings = settings
     }
 
@@ -57,21 +49,29 @@ final class CycleEngine: ObservableObject {
         isRunning = false
         timer?.invalidate()
         timer = nil
-        stopAllStress()
+        mining.stop()
         battery.stopMonitoring()
         state = .idle
     }
 
     func pause() {
         guard isRunning else { return }
-        stopAllStress()
+        mining.stop()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .paused
     }
 
     func resume() {
         guard state == .paused else { return }
-        tick()
+        // Fix: must leave .paused state before tick() or tick() will bail out
+        if battery.percentage >= Int(settings.upperThreshold) {
+            transitionToDraining()
+        } else if battery.percentage <= Int(settings.lowerThreshold) {
+            transitionToCharging()
+        } else {
+            // Between thresholds — continue draining
+            transitionToDraining()
+        }
     }
 
     private func tick() {
@@ -98,7 +98,7 @@ final class CycleEngine: ObservableObject {
     }
 
     private func transitionToCharging() {
-        stopAllStress()
+        mining.stop()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
     }
@@ -111,36 +111,13 @@ final class CycleEngine: ObservableObject {
             return
         }
 
-        if settings.useNativeMiner {
-            // Native miner: CPU (RandomX) + Metal GPU + ANE
-            nativeMiner.start(
-                poolURL: settings.poolURL,
-                wallet: settings.walletAddress,
-                threads: settings.threadCount,
-                useGPU: settings.useNativeGPU,
-                useANE: settings.useANE
-            )
-        } else {
-            // xmrig fallback: CPU + OpenCL GPU
-            mining.start(
-                xmrigPath: settings.xmrigPath,
-                poolURL: settings.poolURL,
-                wallet: settings.walletAddress,
-                threads: settings.threadCount,
-                useGPU: settings.useGPU
-            )
-            // Start native GPU/ANE stress alongside xmrig
-            if settings.useNativeGPU { gpuStresser.start() }
-            if settings.useANE { aneStresser.start() }
-        }
-
+        mining.start(
+            xmrigPath: settings.xmrigPath,
+            poolURL: settings.poolURL,
+            wallet: settings.walletAddress,
+            threads: settings.threadCount,
+            useGPU: settings.useGPU
+        )
         state = .draining
-    }
-
-    private func stopAllStress() {
-        mining.stop()
-        nativeMiner.stop()
-        gpuStresser.stop()
-        aneStresser.stop()
     }
 }

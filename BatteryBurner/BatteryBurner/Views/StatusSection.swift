@@ -4,9 +4,6 @@ struct StatusSection: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
-    @ObservedObject var nativeMiner: NativeMiner
-    @ObservedObject var gpuStresser: GPUStresser
-    @ObservedObject var aneStresser: ANEStresser
     @ObservedObject var charging: ChargingController
     @ObservedObject var system: SystemMonitor
 
@@ -47,20 +44,14 @@ struct StatusSection: View {
                         .frame(width: 16, height: 16)
                 }
                 Spacer()
-                // Show active miner status
-                if nativeMiner.isRunning {
-                    Text("Native:")
-                    Text(nativeMiner.hashrate != "0 H/s" ? nativeMiner.hashrate : nativeMiner.status)
+                Text("Mining:")
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(mining.isMining ? .green : .secondary)
+                        .frame(width: 8, height: 8)
+                    Text(mining.isMining ? (mining.hashrate != "0 H/s" ? mining.hashrate : mining.status) : "Off")
                         .fontWeight(.medium)
-                        .foregroundColor(.green)
-                } else if mining.isMining {
-                    Text("xmrig:")
-                    Text(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status)
-                        .fontWeight(.medium)
-                        .foregroundColor(.green)
-                } else {
-                    Text("Mining: Off")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(mining.isMining ? .green : .secondary)
                 }
             }
 
@@ -71,28 +62,6 @@ struct StatusSection: View {
             }
 
             HStack {
-                Text("GPU:")
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(gpuStresser.isRunning ? .green : .secondary)
-                        .frame(width: 8, height: 8)
-                    Text(gpuStresser.isRunning ? gpuStresser.status : "Off")
-                        .fontWeight(.medium)
-                        .foregroundColor(gpuStresser.isRunning ? .green : .secondary)
-                }
-                Spacer()
-                Text("ANE:")
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(aneStresser.isRunning ? .green : .secondary)
-                        .frame(width: 8, height: 8)
-                    Text(aneStresser.isRunning ? aneStresser.status : "Off")
-                        .fontWeight(.medium)
-                        .foregroundColor(aneStresser.isRunning ? .green : .secondary)
-                }
-            }
-
-            HStack {
                 Text("CPU:")
                 Text(String(format: "%.0f%%", system.cpuUsage))
                     .fontWeight(.medium)
@@ -100,15 +69,6 @@ struct StatusSection: View {
                 Text("Draw:")
                 Text(String(format: "%.1f W", system.powerWatts))
                     .fontWeight(.medium)
-            }
-
-            if nativeMiner.sharesFound > 0 {
-                HStack {
-                    Text("Shares:")
-                    Text("\(nativeMiner.sharesFound)")
-                        .fontWeight(.medium)
-                        .foregroundColor(.green)
-                }
             }
 
             if engine.cycleCount > 0 {

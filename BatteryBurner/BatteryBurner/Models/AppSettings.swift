@@ -10,9 +10,6 @@ final class AppSettings: ObservableObject {
     @AppStorage("threadCount") var threadCount: Int = 8
     @AppStorage("startChargingShortcut") var startChargingShortcut: String = "Start Charging"
     @AppStorage("stopChargingShortcut") var stopChargingShortcut: String = "Stop Charging"
-    @AppStorage("useNativeMiner") var useNativeMiner: Bool = true
     @AppStorage("useGPU") var useGPU: Bool = true
-    @AppStorage("useNativeGPU") var useNativeGPU: Bool = true
-    @AppStorage("useANE") var useANE: Bool = true
     @AppStorage("xmrigPath") var xmrigPath: String = "/opt/homebrew/bin/xmrig"
 }

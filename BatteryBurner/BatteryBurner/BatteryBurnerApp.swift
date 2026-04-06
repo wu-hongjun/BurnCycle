@@ -5,25 +5,19 @@ struct BatteryBurnerApp: App {
     @StateObject private var battery = BatteryMonitor()
     @StateObject private var charging = ChargingController()
     @StateObject private var mining = MiningManager()
-    @StateObject private var gpuStresser = GPUStresser()
-    @StateObject private var aneStresser = ANEStresser()
     @StateObject private var settings = AppSettings()
     @StateObject private var system = SystemMonitor()
     @State private var engine: CycleEngine?
-    @State private var nativeMiner: NativeMiner?
 
     private let maxThreads = ProcessInfo.processInfo.processorCount
 
     var body: some Scene {
         WindowGroup {
-            if let engine = engine, let nativeMiner = nativeMiner {
+            if let engine = engine {
                 PopoverView(
                     battery: battery,
                     engine: engine,
                     mining: mining,
-                    nativeMiner: nativeMiner,
-                    gpuStresser: gpuStresser,
-                    aneStresser: aneStresser,
                     charging: charging,
                     system: system,
                     settings: settings,
@@ -32,23 +26,18 @@ struct BatteryBurnerApp: App {
             } else {
                 ProgressView()
                     .onAppear {
-                        let nm = NativeMiner(gpuStresser: gpuStresser, aneStresser: aneStresser)
-                        nativeMiner = nm
-                        let eng = CycleEngine(
+                        engine = CycleEngine(
                             battery: battery,
                             charging: charging,
                             mining: mining,
-                            nativeMiner: nm,
-                            gpuStresser: gpuStresser,
-                            aneStresser: aneStresser,
                             settings: settings
                         )
-                        engine = eng
+                        battery.update()
                         system.startMonitoring()
                     }
             }
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 360, height: 600)
+        .defaultSize(width: 340, height: 500)
     }
 }
