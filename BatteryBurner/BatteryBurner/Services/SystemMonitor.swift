@@ -80,8 +80,16 @@ final class SystemMonitor: ObservableObject {
             return
         }
 
-        if let amperage = dict["InstantAmperage"] as? Int,
-           let voltage = dict["Voltage"] as? Int {
+        if let voltage = dict["Voltage"] as? Int {
+            // Amperage may be stored as unsigned-wrapped negative (e.g. 18446744073709547277 = -4339)
+            let amperage: Int64
+            if let raw = dict["Amperage"] as? Int64 {
+                amperage = raw
+            } else if let raw = dict["Amperage"] as? Int {
+                amperage = Int64(bitPattern: UInt64(bitPattern: Int64(raw)))
+            } else {
+                return
+            }
             let watts = abs(Double(amperage) * Double(voltage)) / 1_000_000
             powerWatts = (watts * 10).rounded() / 10
         }

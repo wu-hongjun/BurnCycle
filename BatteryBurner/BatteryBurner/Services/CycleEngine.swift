@@ -63,13 +63,9 @@ final class CycleEngine: ObservableObject {
 
     func resume() {
         guard state == .paused else { return }
-        // Fix: must leave .paused state before tick() or tick() will bail out
         if battery.percentage >= Int(settings.upperThreshold) {
             transitionToDraining()
-        } else if battery.percentage <= Int(settings.lowerThreshold) {
-            transitionToCharging()
         } else {
-            // Between thresholds — continue draining
             transitionToDraining()
         }
     }
@@ -79,16 +75,13 @@ final class CycleEngine: ObservableObject {
         battery.update()
 
         let pct = battery.percentage
-        let upper = Int(settings.upperThreshold)
-        let lower = Int(settings.lowerThreshold)
-
         switch state {
         case .charging:
-            if pct >= upper {
+            if pct >= Int(settings.upperThreshold) {
                 transitionToDraining()
             }
         case .draining:
-            if pct <= lower {
+            if pct <= Int(settings.lowerThreshold) {
                 cycleCount += 1
                 transitionToCharging()
             }
@@ -105,19 +98,9 @@ final class CycleEngine: ObservableObject {
 
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
-
-        guard !settings.walletAddress.isEmpty else {
-            state = .draining
-            return
+        if settings.loadEnabled {
+            mining.start()
         }
-
-        mining.start(
-            xmrigPath: settings.xmrigPath,
-            poolURL: settings.poolURL,
-            wallet: settings.walletAddress,
-            threads: settings.threadCount,
-            useGPU: settings.useGPU
-        )
         state = .draining
     }
 }

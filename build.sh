@@ -15,6 +15,12 @@ mkdir -p "$RESOURCES_DIR"
 cp .build/release/BatteryBurner "$APP_DIR/BatteryBurner"
 cp BatteryBurner/Info.plist "../BatteryBurner.app/Contents/Info.plist"
 
+# Bundle xmrig binary
+if [ -f "BatteryBurner/Resources/xmrig" ]; then
+    cp BatteryBurner/Resources/xmrig "$RESOURCES_DIR/xmrig"
+    chmod +x "$RESOURCES_DIR/xmrig"
+fi
+
 # Compile asset catalog (app icon)
 if [ -d "BatteryBurner/Assets.xcassets" ]; then
     echo "Compiling asset catalog..."

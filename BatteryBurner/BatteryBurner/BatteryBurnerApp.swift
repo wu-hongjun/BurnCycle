@@ -9,19 +9,16 @@ struct BatteryBurnerApp: App {
     @StateObject private var system = SystemMonitor()
     @State private var engine: CycleEngine?
 
-    private let maxThreads = ProcessInfo.processInfo.processorCount
-
     var body: some Scene {
         WindowGroup {
             if let engine = engine {
-                PopoverView(
+                MainView(
                     battery: battery,
                     engine: engine,
                     mining: mining,
                     charging: charging,
                     system: system,
-                    settings: settings,
-                    maxThreads: maxThreads
+                    settings: settings
                 )
             } else {
                 ProgressView()
@@ -38,6 +35,5 @@ struct BatteryBurnerApp: App {
             }
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 340, height: 500)
     }
 }
