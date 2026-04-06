@@ -1,19 +1,19 @@
 import Foundation
 import IOKit
 
-// MARK: - IOReport private API declarations (used by mactop/asitop, no sudo needed)
+// MARK: - IOReport private API (matched to mactop ioreport.m declarations)
 
 @_silgen_name("IOReportCopyChannelsInGroup")
-func IOReportCopyChannelsInGroup(_ group: CFString, _ subgroup: CFString?, _ a: UInt64, _ b: UInt64, _ c: UInt64) -> CFDictionary?
+func IOReportCopyChannelsInGroup(_ group: CFString, _ subgroup: CFString?, _ a: UInt64, _ b: UInt64, _ c: UInt64) -> CFMutableDictionary?
 
 @_silgen_name("IOReportCreateSubscription")
-func IOReportCreateSubscription(_ a: UnsafeMutableRawPointer?, _ channels: CFDictionary, _ b: UnsafeMutablePointer<Unmanaged<CFMutableDictionary>?>?, _ c: UInt64, _ d: UnsafeMutablePointer<CFTypeRef?>?) -> Unmanaged<CFTypeRef>?
+func IOReportCreateSubscription(_ a: UnsafeMutableRawPointer?, _ channels: CFMutableDictionary, _ out: UnsafeMutablePointer<CFMutableDictionary?>?, _ d: UInt64, _ e: CFTypeRef?) -> Unmanaged<CFTypeRef>?
 
 @_silgen_name("IOReportCreateSamples")
-func IOReportCreateSamples(_ subscription: CFTypeRef, _ a: CFTypeRef?, _ b: UnsafeMutablePointer<CFTypeRef?>?) -> Unmanaged<CFDictionary>?
+func IOReportCreateSamples(_ subscription: CFTypeRef, _ channels: CFMutableDictionary?, _ unused: CFTypeRef?) -> Unmanaged<CFDictionary>?
 
-@_silgen_name("IOReportGetChannelCount")
-func IOReportGetChannelCount(_ channels: CFDictionary) -> Int
+@_silgen_name("IOReportCreateSamplesDelta")
+func IOReportCreateSamplesDelta(_ prev: CFDictionary, _ curr: CFDictionary, _ a: CFTypeRef?) -> Unmanaged<CFDictionary>?
 
 @_silgen_name("IOReportChannelGetGroup")
 func IOReportChannelGetGroup(_ channel: CFDictionary) -> Unmanaged<CFString>
@@ -21,11 +21,19 @@ func IOReportChannelGetGroup(_ channel: CFDictionary) -> Unmanaged<CFString>
 @_silgen_name("IOReportChannelGetSubGroup")
 func IOReportChannelGetSubGroup(_ channel: CFDictionary) -> Unmanaged<CFString>
 
-@_silgen_name("IOReportSimpleGetIntegerValue")
-func IOReportSimpleGetIntegerValue(_ channel: CFDictionary, _ a: UnsafeMutablePointer<Int32>?) -> Int64
-
 @_silgen_name("IOReportChannelGetChannelName")
 func IOReportChannelGetChannelName(_ channel: CFDictionary) -> Unmanaged<CFString>
+
+@_silgen_name("IOReportStateGetCount")
+func IOReportStateGetCount(_ channel: CFDictionary) -> Int32
+
+@_silgen_name("IOReportStateGetNameForIndex")
+func IOReportStateGetNameForIndex(_ channel: CFDictionary, _ index: Int32) -> Unmanaged<CFString>?
+
+@_silgen_name("IOReportStateGetResidency")
+func IOReportStateGetResidency(_ channel: CFDictionary, _ index: Int32) -> Int64
+
+// MARK: - SystemMonitor
 
 @MainActor
 final class SystemMonitor: ObservableObject {
@@ -38,15 +46,20 @@ final class SystemMonitor: ObservableObject {
 
     // IOReport GPU state
     private var gpuSubscription: CFTypeRef?
+    private var gpuChannels: CFMutableDictionary?
     private var previousGPUSample: CFDictionary?
 
     init() {
         previousCPUInfo = readCPUTicks()
         setupGPUReport()
-        update()
     }
 
     func startMonitoring() {
+        // Take initial GPU sample so first delta works
+        if let sub = gpuSubscription, let channels = gpuChannels,
+           let sampleRef = IOReportCreateSamples(sub, channels, nil) {
+            previousGPUSample = sampleRef.takeRetainedValue()
+        }
         update()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -81,7 +94,7 @@ final class SystemMonitor: ObservableObject {
 
         let totalDelta = userDelta + systemDelta + idleDelta + niceDelta
         if totalDelta > 0 {
-            cpuUsage = ((userDelta + systemDelta + niceDelta) / totalDelta) * 100
+            cpuUsage = min(100, max(0, ((userDelta + systemDelta + niceDelta) / totalDelta) * 100))
         }
 
         previousCPUInfo = current
@@ -100,70 +113,83 @@ final class SystemMonitor: ObservableObject {
         return result == KERN_SUCCESS ? cpuLoadInfo : nil
     }
 
-    // MARK: - GPU Usage via IOReport (same as mactop/asitop)
+    // MARK: - GPU Usage via IOReport (exact mactop approach)
 
     private func setupGPUReport() {
-        guard let channels = IOReportCopyChannelsInGroup("GPU" as CFString, nil, 0, 0, 0) else { return }
+        guard let gpuChan = IOReportCopyChannelsInGroup("GPU Stats" as CFString, nil, 0, 0, 0) else { return }
+        gpuChannels = gpuChan
 
-        var subRef: CFTypeRef?
-        guard let subscription = IOReportCreateSubscription(nil, channels, nil, 0, &subRef),
-              let sub = subRef else { return }
-
-        let _ = subscription // retained by subRef
-        gpuSubscription = sub
-
-        // Take initial sample as baseline
-        if let sample = IOReportCreateSamples(sub, nil, nil) {
-            previousGPUSample = sample.takeRetainedValue()
-        }
+        // Subscription handle comes from the return value (not 5th param)
+        // 3rd param is an out-dictionary (subsystem), must be non-nil
+        var subsystem: CFMutableDictionary?
+        guard let subUnmanaged = IOReportCreateSubscription(nil, gpuChan, &subsystem, 0, nil) else { return }
+        gpuSubscription = subUnmanaged.takeRetainedValue()
     }
 
     private func updateGPU() {
-        guard let sub = gpuSubscription,
-              let prevSample = previousGPUSample else {
-            // Fallback to PerformanceStatistics if IOReport unavailable
+        guard let sub = gpuSubscription, let channels = gpuChannels else {
             updateGPUFallback()
             return
         }
 
-        guard let currentSampleRef = IOReportCreateSamples(sub, nil, nil) else { return }
-        let currentSample = currentSampleRef.takeRetainedValue()
+        // Take current sample (pass channels as 2nd arg, like mactop)
+        guard let sampleRef = IOReportCreateSamples(sub, channels, nil) else { return }
+        let currentSample = sampleRef.takeRetainedValue()
+
         defer { previousGPUSample = currentSample }
 
-        // Delta between samples gives us time-weighted utilization
-        guard let prevItems = (prevSample as NSDictionary)["IOReportChannels"] as? [NSDictionary],
-              let currItems = (currentSample as NSDictionary)["IOReportChannels"] as? [NSDictionary] else {
+        // Need a previous sample to compute delta
+        guard let prevSample = previousGPUSample else { return }
+
+        // Compute delta between previous and current sample
+        guard let deltaRef = IOReportCreateSamplesDelta(prevSample, currentSample, nil) else { return }
+        let delta = deltaRef.takeRetainedValue()
+
+        // Parse delta using CFDictionary/CFArray APIs (not NSDictionary cast)
+        guard let channelsPtr = CFDictionaryGetValue(delta, Unmanaged.passUnretained("IOReportChannels" as CFString).toOpaque()) else {
             updateGPUFallback()
             return
         }
+        let channelArray = unsafeBitCast(channelsPtr, to: CFArray.self)
+        let count = CFArrayGetCount(channelArray)
 
-        var totalActive: Int64 = 0
-        var totalIdle: Int64 = 0
+        for i in 0..<count {
+            guard let itemPtr = CFArrayGetValueAtIndex(channelArray, i) else { continue }
+            let itemCF = unsafeBitCast(itemPtr, to: CFDictionary.self)
 
-        for i in 0..<min(prevItems.count, currItems.count) {
-            let prev = prevItems[i] as CFDictionary
-            let curr = currItems[i] as CFDictionary
+            let group = IOReportChannelGetGroup(itemCF).takeUnretainedValue() as String
+            guard group == "GPU Stats" else { continue }
 
-            let group = IOReportChannelGetGroup(curr).takeUnretainedValue() as String
-            guard group == "GPU" else { continue }
+            let subgroup = IOReportChannelGetSubGroup(itemCF).takeUnretainedValue() as String
+            guard subgroup == "GPU Performance States" else { continue }
 
-            let subgroup = IOReportChannelGetSubGroup(curr).takeUnretainedValue() as String
+            let channel = IOReportChannelGetChannelName(itemCF).takeUnretainedValue() as String
+            guard channel == "GPUPH" else { continue }
 
-            let prevVal = IOReportSimpleGetIntegerValue(prev, nil)
-            let currVal = IOReportSimpleGetIntegerValue(curr, nil)
-            let delta = currVal - prevVal
+            // Found GPUPH — compute active vs total residency per P-state
+            let stateCount = IOReportStateGetCount(itemCF)
+            var totalTime: Int64 = 0
+            var activeTime: Int64 = 0
 
-            if subgroup.contains("Active") || subgroup.contains("Busy") {
-                totalActive += delta
-            } else if subgroup.contains("Idle") || subgroup.contains("Off") {
-                totalIdle += delta
+            for s in 0..<stateCount {
+                let residency = IOReportStateGetResidency(itemCF, s)
+                totalTime += residency
+
+                if let nameRef = IOReportStateGetNameForIndex(itemCF, s) {
+                    let name = nameRef.takeUnretainedValue() as String
+                    if name != "OFF" && name != "IDLE" && name != "DOWN" {
+                        activeTime += residency
+                    }
+                }
             }
+
+            if totalTime > 0 {
+                gpuUsage = min(100, max(0, Double(activeTime) / Double(totalTime) * 100))
+            }
+            return
         }
 
-        let total = totalActive + totalIdle
-        if total > 0 {
-            gpuUsage = Double(totalActive) / Double(total) * 100
-        }
+        updateGPUFallback()
     }
 
     private func updateGPUFallback() {
