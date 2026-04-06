@@ -31,10 +31,23 @@ final class CycleEngine: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         battery.startMonitoring()
+        battery.update()
 
-        if battery.percentage >= Int(settings.upperThreshold) {
+        // Determine initial state based on battery level
+        // Always fire the shortcut to ensure outlet matches desired state
+        let pct = battery.percentage
+        let upper = Int(settings.upperThreshold)
+        let lower = Int(settings.lowerThreshold)
+
+        if pct >= upper {
+            // At or above upper threshold — start draining
             transitionToDraining()
+        } else if pct <= lower {
+            // At or below lower threshold — start charging
+            transitionToCharging()
         } else {
+            // Between thresholds — charge up to upper first
+            // Always ensure outlet is ON when we start in charging mode
             transitionToCharging()
         }
 
@@ -63,10 +76,11 @@ final class CycleEngine: ObservableObject {
 
     func resume() {
         guard state == .paused else { return }
-        if battery.percentage >= Int(settings.upperThreshold) {
+        let pct = battery.percentage
+        if pct >= Int(settings.upperThreshold) {
             transitionToDraining()
         } else {
-            transitionToDraining()
+            transitionToCharging()
         }
     }
 
@@ -90,12 +104,14 @@ final class CycleEngine: ObservableObject {
         }
     }
 
+    /// Turn outlet ON, stop mining
     private func transitionToCharging() {
         mining.stop()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
     }
 
+    /// Turn outlet OFF, start mining if load enabled
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
         if settings.loadEnabled {

@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 import IOKit.ps
 import Combine
 
@@ -7,6 +8,8 @@ final class BatteryMonitor: ObservableObject {
     @Published var percentage: Int = 0
     @Published var isPluggedIn: Bool = false
     @Published var isCharging: Bool = false
+    @Published var cycleCount: Int = 0
+    @Published var healthPercent: Int = 0
 
     private var timer: Timer?
 
@@ -44,6 +47,43 @@ final class BatteryMonitor: ObservableObject {
         }
         if let charging = desc[kIOPSIsChargingKey] as? Bool {
             isCharging = charging
+        }
+
+        // Read cycle count and health from AppleSmartBattery
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
+        guard service != IO_OBJECT_NULL else { return }
+        defer { IOObjectRelease(service) }
+
+        var props: Unmanaged<CFMutableDictionary>?
+        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
+              let dict = props?.takeRetainedValue() as? [String: Any] else { return }
+
+        if let cycles = dict["CycleCount"] as? Int {
+            cycleCount = cycles
+        }
+
+        // Read Maximum Capacity % from system_profiler (matches "About This Mac")
+        if healthPercent == 0 {
+            Task.detached {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
+                proc.arguments = ["SPPowerDataType"]
+                let pipe = Pipe()
+                proc.standardOutput = pipe
+                try? proc.run()
+                proc.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8),
+                   let range = output.range(of: #"Maximum Capacity:\s+(\d+)%"#, options: .regularExpression) {
+                    let match = output[range]
+                    if let numRange = match.range(of: #"\d+"#, options: .regularExpression),
+                       let value = Int(match[numRange]) {
+                        await MainActor.run { [weak self] in
+                            self?.healthPercent = value
+                        }
+                    }
+                }
+            }
         }
     }
 }
