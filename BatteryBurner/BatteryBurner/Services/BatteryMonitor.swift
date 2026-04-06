@@ -10,6 +10,7 @@ final class BatteryMonitor: ObservableObject {
     @Published var isCharging: Bool = false
     @Published var cycleCount: Int = 0
     @Published var healthPercent: Int = 0
+    @Published var chargerWatts: Int = 0
 
     private var timer: Timer?
 
@@ -60,6 +61,12 @@ final class BatteryMonitor: ObservableObject {
 
         if let cycles = dict["CycleCount"] as? Int {
             cycleCount = cycles
+        }
+        if let adapter = dict["AdapterDetails"] as? [String: Any],
+           let watts = adapter["Watts"] as? Int {
+            chargerWatts = watts
+        } else {
+            chargerWatts = 0
         }
 
         // Read Maximum Capacity % from system_profiler (matches "About This Mac")

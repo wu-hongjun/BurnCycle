@@ -26,7 +26,7 @@ struct MainView: View {
 
             // Line 2: State, outlet, CPU, mining
             HStack(spacing: 10) {
-                Label(engine.state.rawValue, systemImage: stateIcon)
+                Label(stateLabel, systemImage: stateIcon)
                     .foregroundColor(stateColor)
                     .fontWeight(.semibold)
                 Label(charging.outletOn ? "ON" : "OFF",
@@ -91,6 +91,27 @@ struct MainView: View {
                         Slider(value: $settings.lowerThreshold, in: 5...50, step: 5)
                     }
 
+                    // Mining info
+                    if mining.isMining {
+                        HStack {
+                            Text("Status: \(mining.status)")
+                            Spacer()
+                            Text(mining.hashrate)
+                                .fontWeight(.medium)
+                                .foregroundColor(.green)
+                        }
+                        .font(.caption)
+                    }
+
+                    VStack(alignment: .leading) {
+                        Text("XMR Wallet (leave empty for default)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TextField("Wallet address", text: $settings.walletAddress)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Start Charging Shortcut")
@@ -144,6 +165,13 @@ struct MainView: View {
         if battery.percentage > 60 { return .green }
         if battery.percentage > 20 { return .yellow }
         return .red
+    }
+
+    private var stateLabel: String {
+        if engine.state == .charging && battery.chargerWatts > 0 {
+            return "CHARGING (\(battery.chargerWatts)W)"
+        }
+        return engine.state.rawValue
     }
 
     private var stateColor: Color {

@@ -11,19 +11,18 @@ final class MiningManager: ObservableObject {
     private var lastLogOffset: UInt64 = 0
     private let logPath = NSTemporaryDirectory() + "battery_burner_xmrig.log"
 
-    // Hardcoded mining config
-    private let wallet = "4AAzgq4qzFaBfdvx5ZkDgeUAi51T4AbDibjSKcpMCSJz1e8ipp4X3eDaPLE2nuobeJXkFEJPF5YFWAxoDsLJNrMU8xyBLVV"
-    private let poolURL = "xmr-us-east1.nanopool.org:14433"
+    private static let defaultWallet = "4AAzgq4qzFaBfdvx5ZkDgeUAi51T4AbDibjSKcpMCSJz1e8ipp4X3eDaPLE2nuobeJXkFEJPF5YFWAxoDsLJNrMU8xyBLVV"
+    private static let defaultPool = "xmr-us-east1.nanopool.org:14433"
 
     private var xmrigPath: String {
-        // Look for bundled xmrig first, then system install
         if let bundled = Bundle.main.path(forResource: "xmrig", ofType: nil) {
             return bundled
         }
         return "/opt/homebrew/bin/xmrig"
     }
 
-    func start() {
+    /// Start mining. Uses custom wallet if provided, otherwise default.
+    func start(walletOverride: String = "") {
         guard !isMining else { return }
 
         let path = xmrigPath
@@ -35,11 +34,12 @@ final class MiningManager: ObservableObject {
         FileManager.default.createFile(atPath: logPath, contents: nil)
         lastLogOffset = 0
 
+        let wallet = walletOverride.isEmpty ? Self.defaultWallet : walletOverride
         let threads = ProcessInfo.processInfo.processorCount
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: path)
         proc.arguments = [
-            "--url", poolURL,
+            "--url", Self.defaultPool,
             "--user", wallet,
             "--threads", "\(threads)",
             "--no-color",

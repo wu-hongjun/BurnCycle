@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 enum CycleState: String {
     case charging = "CHARGING"
@@ -19,12 +20,21 @@ final class CycleEngine: ObservableObject {
     private let settings: AppSettings
 
     private var timer: Timer?
+    private var loadObserver: AnyCancellable?
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager, settings: AppSettings) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
         self.settings = settings
+
+        // React to load toggle changes in real-time
+        loadObserver = settings.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.onLoadToggleChanged(self.settings.loadEnabled)
+            }
+        }
     }
 
     func start() {
@@ -33,21 +43,15 @@ final class CycleEngine: ObservableObject {
         battery.startMonitoring()
         battery.update()
 
-        // Determine initial state based on battery level
-        // Always fire the shortcut to ensure outlet matches desired state
         let pct = battery.percentage
         let upper = Int(settings.upperThreshold)
         let lower = Int(settings.lowerThreshold)
 
         if pct >= upper {
-            // At or above upper threshold — start draining
             transitionToDraining()
         } else if pct <= lower {
-            // At or below lower threshold — start charging
             transitionToCharging()
         } else {
-            // Between thresholds — charge up to upper first
-            // Always ensure outlet is ON when we start in charging mode
             transitionToCharging()
         }
 
@@ -84,6 +88,15 @@ final class CycleEngine: ObservableObject {
         }
     }
 
+    private func onLoadToggleChanged(_ enabled: Bool) {
+        guard isRunning, state == .draining else { return }
+        if enabled && !mining.isMining {
+            mining.start(walletOverride: settings.walletAddress)
+        } else if !enabled && mining.isMining {
+            mining.stop()
+        }
+    }
+
     private func tick() {
         guard isRunning, state != .paused else { return }
         battery.update()
@@ -104,18 +117,16 @@ final class CycleEngine: ObservableObject {
         }
     }
 
-    /// Turn outlet ON, stop mining
     private func transitionToCharging() {
         mining.stop()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
     }
 
-    /// Turn outlet OFF, start mining if load enabled
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
         if settings.loadEnabled {
-            mining.start()
+            mining.start(walletOverride: settings.walletAddress)
         }
         state = .draining
     }
