@@ -69,6 +69,9 @@ struct MainView: View {
             if let error = charging.lastError {
                 Text(error).font(.caption2).foregroundColor(.red)
             }
+            if let warning = engine.mismatchWarning {
+                Text(warning).font(.caption2).foregroundColor(.orange)
+            }
 
             // Controls
             HStack {
@@ -256,25 +259,45 @@ struct MainView: View {
     }
 
     private var stateLabel: String {
-        if engine.state == .charging && battery.chargerWatts > 0 {
-            return "CHARGING (\(battery.chargerWatts)W)"
+        switch engine.state {
+        case .charging:
+            if battery.isPluggedIn && battery.chargerWatts > 0 {
+                return "CHARGING (\(battery.chargerWatts)W)"
+            } else if battery.isPluggedIn {
+                return "CHARGING"
+            } else {
+                return "WAITING FOR AC"
+            }
+        case .draining:
+            if battery.isPluggedIn {
+                return "WAITING TO DRAIN"
+            } else {
+                return "DRAINING"
+            }
+        case .idle:
+            return "IDLE"
         }
-        return engine.state.rawValue
     }
 
     private var stateColor: Color {
         switch engine.state {
-        case .charging: return .green
-        case .draining: return .orange
-        case .idle: return .secondary
+        case .charging:
+            return battery.isPluggedIn ? .green : .yellow
+        case .draining:
+            return battery.isPluggedIn ? .yellow : .orange
+        case .idle:
+            return .secondary
         }
     }
 
     private var stateIcon: String {
         switch engine.state {
-        case .charging: return "bolt.fill"
-        case .draining: return "flame.fill"
-        case .idle: return "moon.fill"
+        case .charging:
+            return battery.isPluggedIn ? "bolt.fill" : "exclamationmark.triangle.fill"
+        case .draining:
+            return battery.isPluggedIn ? "exclamationmark.triangle.fill" : "flame.fill"
+        case .idle:
+            return "moon.fill"
         }
     }
 }

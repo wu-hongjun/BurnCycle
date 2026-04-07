@@ -13,6 +13,7 @@ final class CycleEngine: ObservableObject {
     @Published var cycleCount: Int = 0
     @Published var isRunning: Bool = false
     @Published var loadThrottled: Bool = false
+    @Published var mismatchWarning: String?
 
     private let battery: BatteryMonitor
     private let charging: ChargingController
@@ -28,8 +29,10 @@ final class CycleEngine: ObservableObject {
     private let externalLoadThreshold: Double = 80
     private let criticalBattery = 5
 
-    // Track what method was last started so we can detect changes
     private var activeLoadMethod: String?
+    private var verifyTicksRemaining: Int = 0 // countdown ticks to verify power state
+    private var retryCount: Int = 0
+    private let maxRetries = 3
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
          stress: StressManager, system: SystemMonitor, settings: AppSettings) {
@@ -125,8 +128,50 @@ final class CycleEngine: ObservableObject {
         battery.update()
         system.update()
 
+        // Verify physical power state matches expected state
+        if verifyTicksRemaining > 0 {
+            verifyTicksRemaining -= 1
+            if verifyTicksRemaining == 0 {
+                verifyPowerState()
+            }
+        }
+
         if state == .draining {
             manageLoad()
+        }
+    }
+
+    /// Check that physical power state matches our cycle state
+    /// Called ~20s after a transition (2 ticks at 10s) to give the shortcut time
+    private func verifyPowerState() {
+        let pluggedIn = battery.isPluggedIn
+
+        if state == .charging && !pluggedIn {
+            // Expected charging but not plugged in — shortcut failed or cable not connected
+            if retryCount < maxRetries {
+                retryCount += 1
+                mismatchWarning = "Outlet not responding (retry \(retryCount)/\(maxRetries))..."
+                charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+                verifyTicksRemaining = 2 // check again in ~20s
+            } else {
+                mismatchWarning = "Charger not detected. Check cable and outlet."
+                retryCount = 0
+            }
+        } else if state == .draining && pluggedIn {
+            // Expected draining but still plugged in
+            if retryCount < maxRetries {
+                retryCount += 1
+                mismatchWarning = "Outlet not responding (retry \(retryCount)/\(maxRetries))..."
+                charging.stopCharging(shortcutName: settings.stopChargingShortcut)
+                verifyTicksRemaining = 2
+            } else {
+                mismatchWarning = "Still charging. Check outlet and shortcut."
+                retryCount = 0
+            }
+        } else {
+            // State matches — clear warnings
+            mismatchWarning = nil
+            retryCount = 0
         }
     }
 
@@ -196,6 +241,8 @@ final class CycleEngine: ObservableObject {
         stopAllLoad()
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
+        verifyTicksRemaining = 2 // verify in ~20s
+        mismatchWarning = nil
     }
 
     private func transitionToDraining() {
@@ -208,5 +255,7 @@ final class CycleEngine: ObservableObject {
             }
         }
         state = .draining
+        verifyTicksRemaining = 2
+        mismatchWarning = nil
     }
 }
