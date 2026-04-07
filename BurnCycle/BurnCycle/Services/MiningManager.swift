@@ -147,9 +147,4 @@ final class MiningManager: ObservableObject {
         }
     }
 
-    deinit {
-        if let proc = process, proc.isRunning {
-            proc.terminate()
-        }
-    }
 }

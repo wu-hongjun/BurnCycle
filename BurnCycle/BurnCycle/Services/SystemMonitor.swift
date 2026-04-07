@@ -43,6 +43,7 @@ final class SystemMonitor: ObservableObject {
 
     private var timer: Timer?
     private var previousCPUInfo: host_cpu_load_info?
+    private let hostPort = mach_host_self()
 
     // IOReport GPU state
     private var gpuSubscription: CFTypeRef?
@@ -106,7 +107,7 @@ final class SystemMonitor: ObservableObject {
 
         let result = withUnsafeMutablePointer(to: &cpuLoadInfo) { ptr in
             ptr.withMemoryRebound(to: integer_t.self, capacity: Int(size)) { intPtr in
-                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, intPtr, &size)
+                host_statistics(hostPort, HOST_CPU_LOAD_INFO, intPtr, &size)
             }
         }
 

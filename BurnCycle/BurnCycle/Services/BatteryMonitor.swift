@@ -1,7 +1,6 @@
 import Foundation
 import IOKit
 import IOKit.ps
-import Combine
 
 @MainActor
 final class BatteryMonitor: ObservableObject {
@@ -22,7 +21,7 @@ final class BatteryMonitor: ObservableObject {
     @Published var chargingWatts: Double = 0     // actual charging power
     @Published var voltage: Double = 0           // V
 
-    private var fastTimer: Timer?  // 5s — battery %, charging state, charger watts
+    private var fastTimer: Timer?  // 2s — battery %, charging state, charger watts
     private var slowTimer: Timer?  // 60s — cycle count, health (rarely changes)
 
     init() {
@@ -56,7 +55,7 @@ final class BatteryMonitor: ObservableObject {
         updateFast()
     }
 
-    // MARK: - Fast updates (5s) — battery %, power source, charger
+    // MARK: - Fast updates (2s) — battery %, power source, charger
 
     private func updateFast() {
         // Read battery percentage and charging state from IOPowerSources

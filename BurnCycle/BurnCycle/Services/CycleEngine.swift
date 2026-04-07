@@ -45,7 +45,7 @@ final class CycleEngine: ObservableObject {
 
         settingsObserver = settings.objectWillChange.sink { [weak self] _ in
             Task { @MainActor in
-                self?.onSettingsChanged()
+                try? await Task.sleep(nanoseconds: 1_000_000); self?.onSettingsChanged()
             }
         }
 
