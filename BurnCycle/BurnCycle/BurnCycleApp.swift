@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct BatteryBurnerApp: App {
+struct BurnCycleApp: App {
     @StateObject private var battery = BatteryMonitor()
     @StateObject private var charging = ChargingController()
     @StateObject private var mining = MiningManager()

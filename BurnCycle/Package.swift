@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "BatteryBurner",
+    name: "BurnCycle",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "BatteryBurner",
-            path: "BatteryBurner",
+            name: "BurnCycle",
+            path: "BurnCycle",
             exclude: ["Info.plist", "Assets.xcassets", "Resources"],
             linkerSettings: [
                 .linkedFramework("IOKit"),

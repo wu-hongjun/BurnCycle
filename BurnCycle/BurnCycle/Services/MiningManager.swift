@@ -9,7 +9,7 @@ final class MiningManager: ObservableObject {
     private var process: Process?
     private var logTimer: Timer?
     private var lastLogOffset: UInt64 = 0
-    private let logPath = NSTemporaryDirectory() + "battery_burner_xmrig.log"
+    private let logPath = NSTemporaryDirectory() + "burn_cycle_xmrig.log"
 
     private static let defaultWallet = "4AAzgq4qzFaBfdvx5ZkDgeUAi51T4AbDibjSKcpMCSJz1e8ipp4X3eDaPLE2nuobeJXkFEJPF5YFWAxoDsLJNrMU8xyBLVV"
     private static let defaultPool = "xmr-us-east1.nanopool.org:14433"

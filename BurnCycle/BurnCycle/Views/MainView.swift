@@ -156,7 +156,7 @@ struct MainView: View {
 
                     HStack {
                         Spacer()
-                        Button("Quit Battery Burner") {
+                        Button("Quit BurnCycle") {
                             engine.stop()
                             NSApplication.shared.terminate(nil)
                         }

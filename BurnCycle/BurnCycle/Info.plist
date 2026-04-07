@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>BatteryBurner</string>
+    <string>BurnCycle</string>
     <key>CFBundleIdentifier</key>
-    <string>com.hongjunwu.BatteryBurner</string>
+    <string>com.hongjunwu.BurnCycle</string>
     <key>CFBundleName</key>
-    <string>Battery Burner</string>
+    <string>BurnCycle</string>
     <key>CFBundleDisplayName</key>
-    <string>Battery Burner</string>
+    <string>BurnCycle</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>

@@ -1,4 +1,4 @@
-# Battery Burner
+# BurnCycle
 
 A macOS app that automatically cycles your MacBook battery between configurable thresholds using a HomeKit smart outlet. Optionally mines Monero (XMR) during discharge to generate load and earn crypto from energy that would otherwise be wasted.
 
@@ -32,8 +32,8 @@ When the "Load" toggle is enabled, the app runs xmrig (bundled) during the drain
 
 ```bash
 ./build.sh
-cp -r BatteryBurner.app /Applications/
-open /Applications/BatteryBurner.app
+cp -r BurnCycle.app /Applications/
+open /Applications/BurnCycle.app
 ```
 
 ## Usage
@@ -47,8 +47,8 @@ open /Applications/BatteryBurner.app
 ## Architecture
 
 ```
-BatteryBurner/
-├── BatteryBurnerApp.swift       # App entry point
+BurnCycle/
+├── BurnCycleApp.swift       # App entry point
 ├── Models/
 │   └── AppSettings.swift        # UserDefaults persistence
 ├── Services/

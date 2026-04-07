@@ -1,6 +1,6 @@
 # Build artifacts
-BatteryBurner.app/
-BatteryBurner/.build/
+BurnCycle.app/
+BurnCycle/.build/
 .swiftpm/
 .omc/
 
