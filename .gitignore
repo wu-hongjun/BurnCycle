@@ -7,3 +7,4 @@ BurnCycle/.build/
 # macOS
 .DS_Store
 references/
+site/
