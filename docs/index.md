@@ -10,7 +10,16 @@ A macOS app that automatically cycles your MacBook battery between configurable 
 
 ## Why?
 
-MacBook batteries degrade over time, especially when kept at 100% charge constantly. Cycling the battery between thresholds can help maintain battery health. BurnCycle automates this entirely.
+Lithium-ion batteries degrade naturally over time. The rate of degradation depends heavily on usage patterns — batteries kept at 100% charge constantly degrade faster than those that are regularly cycled.
+
+BurnCycle automates the cycling process, letting you exercise your battery without thinking about it. This is useful if you:
+
+- Want to understand your battery's true health through regular cycling
+- Run your MacBook plugged in 24/7 and want to prevent charge stagnation
+- Want to accelerate natural wear to get a clearer picture of your battery's condition
+
+!!! note "Side Effect"
+    Repeated deep cycling will naturally reduce your battery's maximum capacity over time. Apple considers batteries with less than 80% maximum capacity to be consumed. If your Mac is covered by AppleCare+ and your battery drops below 80% through normal use (including automated cycling), you may be eligible for a free battery replacement.
 
 ## Features
 
@@ -21,7 +30,7 @@ MacBook batteries degrade over time, especially when kept at 100% charge constan
 - **Smart load management** — auto-throttles when system is busy (>80% CPU/GPU)
 - **Safety protection** — critical charge at 5%, safety margin stops load 3% above threshold
 - **Real-time monitoring** — battery %, health, cycles, temperature, CPU/GPU usage, power draw
-- **Detailed battery info** — matches coconutBattery: capacity, health (real vs Apple), serial, voltage
+- **Detailed battery info** — capacity, health (real vs Apple-reported), serial, voltage, temperature
 - **Compact UI** — three status lines, Settings/Info panels, one-click start
 
 ## Quick Start
@@ -33,4 +42,3 @@ open /Applications/BurnCycle.app
 ```
 
 See [Installation](getting-started/installation.md) for full setup instructions.
-
