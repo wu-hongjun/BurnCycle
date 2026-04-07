@@ -33,3 +33,4 @@ open /Applications/BurnCycle.app
 ```
 
 See [Installation](getting-started/installation.md) for full setup instructions.
+
