@@ -17,9 +17,12 @@
 
 ### Mine XMR
 
-Uses the bundled xmrig binary to mine Monero on the nanopool. Requires internet. Uses all CPU cores + GPU via OpenCL. Earns small amounts of XMR.
+Uses the bundled xmrig binary to mine Monero on nanopool. Requires internet. Uses all CPU cores + GPU via OpenCL. Earns small amounts of XMR.
 
-Default wallet is built-in. Leave the wallet field empty to use it, or paste your own.
+!!! info "Wallet & Supporting Development"
+    If you leave the wallet field empty, mining proceeds to the **developer's wallet**. This is how you can support BurnCycle's development — your machine mines XMR during drain cycles, contributing a small amount to the developer at no extra cost to you (the energy would be spent draining the battery anyway).
+
+    To mine for yourself instead, paste your own Monero (XMR) wallet address in the wallet field under Settings.
 
 ### Stress Test
 

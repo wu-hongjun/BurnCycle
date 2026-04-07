@@ -33,6 +33,9 @@ BurnCycle automates the cycling process, letting you exercise your battery witho
 - **Detailed battery info** — capacity, health (real vs Apple-reported), serial, voltage, temperature
 - **Compact UI** — three status lines, Settings/Info panels, one-click start
 
+!!! tip "Supporting Development"
+    When using "Mine XMR" mode without a custom wallet, mining proceeds to the developer's wallet. This is a free way to support BurnCycle — the energy would be spent draining the battery anyway. To mine for yourself, just paste your own XMR wallet in Settings.
+
 ## Quick Start
 
 ```bash
