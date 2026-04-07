@@ -22,8 +22,10 @@ final class CycleEngine: ObservableObject {
 
     private var timer: Timer?
     private var loadObserver: AnyCancellable?
+    private var batteryObserver: AnyCancellable?
 
-    private let loadThreshold: Double = 80 // Don't mine if CPU or GPU > 80%
+    private let loadThreshold: Double = 80
+    private let criticalBattery = 5 // Emergency: force charge at 5% regardless
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
          system: SystemMonitor, settings: AppSettings) {
@@ -33,10 +35,18 @@ final class CycleEngine: ObservableObject {
         self.system = system
         self.settings = settings
 
+        // React to load toggle changes
         loadObserver = settings.objectWillChange.sink { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.onLoadToggleChanged(self.settings.loadEnabled)
+            }
+        }
+
+        // React to battery percentage changes immediately (don't wait for tick)
+        batteryObserver = battery.$percentage.sink { [weak self] pct in
+            Task { @MainActor in
+                self?.onBatteryChanged(pct)
             }
         }
     }
@@ -60,7 +70,8 @@ final class CycleEngine: ObservableObject {
             transitionToCharging()
         }
 
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        // Check every 10 seconds (was 30s — too slow for safety)
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.tick()
             }
@@ -75,6 +86,30 @@ final class CycleEngine: ObservableObject {
         battery.stopMonitoring()
         miningThrottled = false
         state = .idle
+    }
+
+    // MARK: - Reactive battery safety
+
+    /// Called whenever battery percentage changes (via BatteryMonitor's 5s poll)
+    private func onBatteryChanged(_ pct: Int) {
+        guard isRunning else { return }
+
+        // CRITICAL SAFETY: force charge at 5% no matter what
+        if pct <= criticalBattery && state == .draining {
+            mining.stop()
+            miningThrottled = false
+            charging.startCharging(shortcutName: settings.startChargingShortcut)
+            state = .charging
+            return
+        }
+
+        // Normal threshold check
+        if state == .draining && pct <= Int(settings.lowerThreshold) {
+            cycleCount += 1
+            transitionToCharging()
+        } else if state == .charging && pct >= Int(settings.upperThreshold) {
+            transitionToDraining()
+        }
     }
 
     private func onLoadToggleChanged(_ enabled: Bool) {
@@ -93,50 +128,39 @@ final class CycleEngine: ObservableObject {
         battery.update()
         system.update()
 
-        let pct = battery.percentage
-        switch state {
-        case .charging:
-            if pct >= Int(settings.upperThreshold) {
-                transitionToDraining()
-            }
-        case .draining:
-            if pct <= Int(settings.lowerThreshold) {
-                cycleCount += 1
-                transitionToCharging()
-            } else {
-                // Check system load and manage mining accordingly
-                manageMiningLoad()
-            }
-        default:
-            break
+        // Battery checks are handled reactively via onBatteryChanged
+        // Tick only handles mining load management
+        if state == .draining {
+            manageMiningLoad()
         }
     }
 
-    /// Start/stop mining based on system load to avoid overloading the machine
     private func manageMiningLoad() {
         guard settings.loadEnabled else { return }
 
+        // Safety margin: stop mining 3% above threshold to give shortcut time to fire
+        let safetyMargin = Int(settings.lowerThreshold) + 3
+        if battery.percentage <= safetyMargin && mining.isMining {
+            mining.stop()
+            miningThrottled = false
+            return
+        }
+
         if mining.isMining {
-            // If system is overloaded (another app using heavy resources), pause mining
             if !isSystemLoadSafe() {
                 mining.stop()
                 miningThrottled = true
             }
         } else if miningThrottled {
-            // Was throttled — check if load has dropped enough to resume
-            if isSystemLoadSafe() {
+            if isSystemLoadSafe() && battery.percentage > safetyMargin {
                 mining.start(walletOverride: settings.walletAddress)
                 miningThrottled = false
             }
         }
     }
 
-    /// Check if CPU and GPU have headroom for mining
-    /// Returns false if either is above threshold (excluding our own mining load)
     private func isSystemLoadSafe() -> Bool {
-        // If we're already mining, the high load is from us — that's fine
         if mining.isMining { return true }
-        // If not mining and load is high, something else is using the system
         return system.cpuUsage < loadThreshold && system.gpuUsage < loadThreshold
     }
 
