@@ -79,8 +79,8 @@ final class StressManager: ObservableObject {
 
             gpuTask = Task.detached {
                 while !Task.isCancelled {
-                    let cmd = commandQueue.makeCommandBuffer()!
-                    let enc = cmd.makeComputeCommandEncoder()!
+                    guard let cmd = commandQueue.makeCommandBuffer(),
+                          let enc = cmd.makeComputeCommandEncoder() else { continue }
                     enc.setComputePipelineState(pipelineState)
                     enc.setBuffer(buffer, offset: 0, index: 0)
                     enc.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroup)

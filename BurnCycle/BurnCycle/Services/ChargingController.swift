@@ -2,38 +2,40 @@ import Foundation
 
 @MainActor
 final class ChargingController: ObservableObject {
-    @Published var lastAction: String = "None"
     @Published var isRunningShortcut: Bool = false
-    @Published var outletOn: Bool = false
     @Published var lastError: String?
 
-    private var lastActionTime: Date = .distantPast
+    private var lastStartTime: Date = .distantPast
+    private var lastStopTime: Date = .distantPast
     private let cooldown: TimeInterval = 30
 
-    func startCharging(shortcutName: String) {
-        runShortcut(name: shortcutName, action: "Start Charging", skipCooldown: false)
+    /// Start charging — safety-critical, bypasses cooldown
+    func startCharging(shortcutName: String, force: Bool = false) {
+        runShortcut(name: shortcutName, action: "start", skipCooldown: force)
     }
 
     func stopCharging(shortcutName: String) {
-        runShortcut(name: shortcutName, action: "Stop Charging", skipCooldown: false)
+        runShortcut(name: shortcutName, action: "stop", skipCooldown: false)
     }
 
     func testStartCharging(shortcutName: String) {
-        runShortcut(name: shortcutName, action: "Start Charging", skipCooldown: true)
+        runShortcut(name: shortcutName, action: "start", skipCooldown: true)
     }
 
     func testStopCharging(shortcutName: String) {
-        runShortcut(name: shortcutName, action: "Stop Charging", skipCooldown: true)
+        runShortcut(name: shortcutName, action: "stop", skipCooldown: true)
     }
 
     private func runShortcut(name: String, action: String, skipCooldown: Bool) {
         let now = Date()
         if !skipCooldown {
-            guard now.timeIntervalSince(lastActionTime) >= cooldown else { return }
+            // Per-action cooldown so start and stop don't block each other
+            let lastTime = action == "start" ? lastStartTime : lastStopTime
+            guard now.timeIntervalSince(lastTime) >= cooldown else { return }
         }
         guard !isRunningShortcut else { return }
 
-        lastActionTime = now
+        if action == "start" { lastStartTime = now } else { lastStopTime = now }
         isRunningShortcut = true
         lastError = nil
 
@@ -71,9 +73,7 @@ final class ChargingController: ObservableObject {
                 guard let self else { return }
                 self.isRunningShortcut = false
                 if didSucceed {
-                    self.lastAction = action
                     self.lastError = nil
-                    self.outletOn = (action == "Start Charging")
                 } else {
                     self.lastError = errMsg ?? "Shortcut failed"
                 }

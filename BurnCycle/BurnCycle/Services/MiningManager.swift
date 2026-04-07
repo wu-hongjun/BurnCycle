@@ -31,7 +31,8 @@ final class MiningManager: ObservableObject {
             return
         }
 
-        FileManager.default.createFile(atPath: logPath, contents: nil)
+        // Truncate old log to avoid stale data
+        try? "".write(toFile: logPath, atomically: true, encoding: .utf8)
         lastLogOffset = 0
 
         let wallet = walletOverride.isEmpty ? Self.defaultWallet : walletOverride
@@ -81,14 +82,30 @@ final class MiningManager: ObservableObject {
         logTimer?.invalidate()
         logTimer = nil
         guard let proc = process, proc.isRunning else {
+            process = nil
             isMining = false
             return
         }
+
+        // SIGTERM first, then escalate to SIGKILL after 3s
         proc.terminate()
+        let capturedProc = proc
         process = nil
         isMining = false
         hashrate = "0 H/s"
         status = "Stopped"
+
+        Task.detached {
+            // Wait up to 3 seconds for graceful exit
+            for _ in 0..<30 {
+                if !capturedProc.isRunning { return }
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
+            // Still running — force kill
+            if capturedProc.isRunning {
+                capturedProc.interrupt()
+            }
+        }
     }
 
     private func readLog() {

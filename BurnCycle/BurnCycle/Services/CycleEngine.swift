@@ -25,8 +25,11 @@ final class CycleEngine: ObservableObject {
     private var settingsObserver: AnyCancellable?
     private var batteryObserver: AnyCancellable?
 
-    private let loadThreshold: Double = 80
+    private let externalLoadThreshold: Double = 80
     private let criticalBattery = 5
+
+    // Track what method was last started so we can detect changes
+    private var activeLoadMethod: String?
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
          stress: StressManager, system: SystemMonitor, settings: AppSettings) {
@@ -83,9 +86,10 @@ final class CycleEngine: ObservableObject {
     private func onBatteryChanged(_ pct: Int) {
         guard isRunning else { return }
 
+        // CRITICAL SAFETY: force charge at 5%, bypass cooldown
         if pct <= criticalBattery && state == .draining {
             stopAllLoad()
-            charging.startCharging(shortcutName: settings.startChargingShortcut)
+            charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
             state = .charging
             return
         }
@@ -101,10 +105,18 @@ final class CycleEngine: ObservableObject {
     private func onSettingsChanged() {
         guard isRunning, state == .draining else { return }
 
-        if settings.loadEnabled && !isLoadRunning() && isSystemLoadSafe() {
+        let wantLoad = settings.loadEnabled
+        let wantMethod = settings.loadMethod
+        let running = isLoadRunning()
+
+        if wantLoad && !running && isExternalLoadSafe() {
             startLoad()
-        } else if !settings.loadEnabled && isLoadRunning() {
+        } else if !wantLoad && running {
             stopAllLoad()
+        } else if wantLoad && running && wantMethod != activeLoadMethod {
+            // Method changed while running — switch
+            stopAllLoad()
+            startLoad()
         }
     }
 
@@ -122,6 +134,7 @@ final class CycleEngine: ObservableObject {
 
     private func startLoad() {
         loadThrottled = false
+        activeLoadMethod = settings.loadMethod
         switch settings.selectedLoadMethod {
         case .mine:
             mining.start(walletOverride: settings.walletAddress)
@@ -134,6 +147,7 @@ final class CycleEngine: ObservableObject {
         mining.stop()
         stress.stop()
         loadThrottled = false
+        activeLoadMethod = nil
     }
 
     private func isLoadRunning() -> Bool {
@@ -143,27 +157,37 @@ final class CycleEngine: ObservableObject {
     private func manageLoad() {
         guard settings.loadEnabled else { return }
 
+        // Safety margin: stop load 3% above threshold
         let safetyMargin = Int(settings.lowerThreshold) + 3
         if battery.percentage <= safetyMargin && isLoadRunning() {
             stopAllLoad()
             return
         }
 
+        // Check if external apps are using heavy resources
+        // (our own load doesn't count — subtract approximate baseline)
         if isLoadRunning() {
-            if !isSystemLoadSafe() {
+            if !isExternalLoadSafe() {
                 stopAllLoad()
                 loadThrottled = true
             }
         } else if loadThrottled {
-            if isSystemLoadSafe() && battery.percentage > safetyMargin {
+            if isExternalLoadSafe() && battery.percentage > safetyMargin {
                 startLoad()
             }
         }
     }
 
-    private func isSystemLoadSafe() -> Bool {
-        if isLoadRunning() { return true }
-        return system.cpuUsage < loadThreshold && system.gpuUsage < loadThreshold
+    /// Check if external (non-BurnCycle) load is below threshold
+    /// When our load is running, we check if usage is excessively high (>95%)
+    /// which suggests external apps are also consuming heavily
+    private func isExternalLoadSafe() -> Bool {
+        if isLoadRunning() {
+            // If we're running and CPU/GPU is near 100%, external apps are also heavy
+            return system.cpuUsage < 95 && system.gpuUsage < 95
+        }
+        // If we're not running, check the raw threshold
+        return system.cpuUsage < externalLoadThreshold && system.gpuUsage < externalLoadThreshold
     }
 
     // MARK: - State transitions
@@ -177,7 +201,7 @@ final class CycleEngine: ObservableObject {
     private func transitionToDraining() {
         charging.stopCharging(shortcutName: settings.stopChargingShortcut)
         if settings.loadEnabled {
-            if isSystemLoadSafe() {
+            if isExternalLoadSafe() {
                 startLoad()
             } else {
                 loadThrottled = true
