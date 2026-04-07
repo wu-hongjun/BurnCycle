@@ -3,8 +3,8 @@
 ## Building from Source
 
 ```bash
-git clone https://github.com/wu-hongjun/burn-cycle.git
-cd burn-cycle
+git clone https://github.com/wu-hongjun/BurnCycle.git
+cd BurnCycle
 ./build.sh
 ```
 
@@ -39,4 +39,4 @@ Requires:
 
 ## Filing Issues
 
-Report bugs at [github.com/wu-hongjun/burn-cycle/issues](https://github.com/wu-hongjun/burn-cycle/issues)
+Report bugs at [github.com/wu-hongjun/BurnCycle/issues](https://github.com/wu-hongjun/BurnCycle/issues)

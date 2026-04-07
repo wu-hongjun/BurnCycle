@@ -29,8 +29,8 @@ BurnCycle controls your charger by running Apple Shortcuts that toggle a HomeKit
 ## Building the App
 
 ```bash
-git clone https://github.com/wu-hongjun/burn-cycle.git
-cd burn-cycle
+git clone https://github.com/wu-hongjun/BurnCycle.git
+cd BurnCycle
 ./build.sh
 ```
 

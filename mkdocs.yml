@@ -1,8 +1,8 @@
 site_name: BurnCycle
 site_description: macOS app that automatically cycles MacBook battery with optional XMR mining and stress testing
 site_url: https://burncycle.hongjunwu.com/
-repo_url: https://github.com/wu-hongjun/burn-cycle
-repo_name: wu-hongjun/burn-cycle
+repo_url: https://github.com/wu-hongjun/BurnCycle
+repo_name: wu-hongjun/BurnCycle
 
 theme:
   name: material
