@@ -30,7 +30,7 @@ struct BatteryBurnerApp: App {
                             system: system,
                             settings: settings
                         )
-                        battery.update()
+                        battery.startMonitoring()
                         system.startMonitoring()
                     }
             }

@@ -54,7 +54,6 @@ final class CycleEngine: ObservableObject {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        battery.startMonitoring()
         battery.update()
         system.update()
 
@@ -83,7 +82,6 @@ final class CycleEngine: ObservableObject {
         timer?.invalidate()
         timer = nil
         mining.stop()
-        battery.stopMonitoring()
         miningThrottled = false
         state = .idle
     }

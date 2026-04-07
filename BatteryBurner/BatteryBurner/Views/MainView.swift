@@ -9,6 +9,7 @@ struct MainView: View {
     @ObservedObject var settings: AppSettings
 
     @State private var showSettings = false
+    @State private var showInfo = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -65,10 +66,18 @@ struct MainView: View {
                 Text(error).font(.caption2).foregroundColor(.red)
             }
 
-            // Controls: Settings, Start/Stop
+            // Controls: Settings, Info, Start/Stop
             HStack {
                 Button("Settings") {
                     showSettings.toggle()
+                    if showSettings { showInfo = false }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Info") {
+                    showInfo.toggle()
+                    if showInfo { showSettings = false }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -158,9 +167,45 @@ struct MainView: View {
                 .font(.callout)
                 .padding(.top, 4)
             }
+
+            // Info panel
+            if showInfo {
+                VStack(spacing: 6) {
+                    infoRow("Battery Charge", "\(battery.currentCapacityMAh) mAh (\(battery.percentage)%)")
+                    infoRow("Full Charge Capacity", "\(battery.fullChargeCapacityMAh) mAh")
+                    infoRow("Design Capacity", "\(battery.designCapacityMAh) mAh")
+                    if battery.designCapacityMAh > 0 {
+                        infoRow("Battery Health (Real)", String(format: "%.1f%%",
+                            Double(battery.fullChargeCapacityMAh) / Double(battery.designCapacityMAh) * 100))
+                    }
+                    infoRow("Battery Health (Apple)", "\(battery.healthPercent)%")
+                    infoRow("Charge Cycles", "\(battery.cycleCount)")
+                    infoRow("Temperature", String(format: "%.1f °C", battery.temperature))
+                    infoRow("Voltage", String(format: "%.3f V", battery.voltage))
+                    infoRow("Serial", battery.serial)
+                    if battery.isPluggedIn {
+                        infoRow("Power Adapter", battery.adapterName)
+                        infoRow("Battery Input", String(format: "%.1f W", battery.chargingWatts))
+                    } else {
+                        infoRow("Battery Output", String(format: "%.1f W", battery.chargingWatts))
+                    }
+                }
+                .font(.caption)
+                .padding(.top, 4)
+            }
         }
         .padding(16)
         .frame(width: 320)
+    }
+
+    private func infoRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .fontWeight(.medium)
+        }
     }
 
     private var batteryIcon: String {
