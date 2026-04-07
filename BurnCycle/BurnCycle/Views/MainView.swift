@@ -4,6 +4,7 @@ struct MainView: View {
     @ObservedObject var battery: BatteryMonitor
     @ObservedObject var engine: CycleEngine
     @ObservedObject var mining: MiningManager
+    @ObservedObject var stress: StressManager
     @ObservedObject var charging: ChargingController
     @ObservedObject var system: SystemMonitor
     @ObservedObject var settings: AppSettings
@@ -42,15 +43,18 @@ struct MainView: View {
             .font(.caption)
             .foregroundColor(.secondary)
 
-            // Row 3: Mining status (if active)
-            if mining.isMining || engine.miningThrottled {
+            // Row 3: Load status (if active)
+            if mining.isMining || stress.isRunning || engine.loadThrottled {
                 HStack {
                     if mining.isMining {
                         Label(mining.hashrate != "0 H/s" ? mining.hashrate : mining.status,
-                              systemImage: "cpu")
+                              systemImage: "bitcoinsign.circle")
                             .foregroundColor(.green)
-                    } else if engine.miningThrottled {
-                        Label("Mining throttled (system busy)", systemImage: "exclamationmark.triangle.fill")
+                    } else if stress.isRunning {
+                        Label(stress.status, systemImage: "bolt.trianglebadge.exclamationmark")
+                            .foregroundColor(.orange)
+                    } else if engine.loadThrottled {
+                        Label("Throttled (system busy)", systemImage: "exclamationmark.triangle.fill")
                             .foregroundColor(.yellow)
                     }
                     Spacer()
@@ -66,7 +70,7 @@ struct MainView: View {
                 Text(error).font(.caption2).foregroundColor(.red)
             }
 
-            // Controls: Settings, Info, Start/Stop
+            // Controls
             HStack {
                 Button("Settings") {
                     showSettings.toggle()
@@ -94,6 +98,8 @@ struct MainView: View {
             // Settings panel
             if showSettings {
                 VStack(alignment: .leading, spacing: 10) {
+                    // -- Battery Thresholds --
+                    Text("Battery Thresholds").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                     VStack(alignment: .leading) {
                         Text("Charge to: \(Int(settings.upperThreshold))%")
                         Slider(value: $settings.upperThreshold, in: 50...100, step: 5)
@@ -103,30 +109,57 @@ struct MainView: View {
                         Slider(value: $settings.lowerThreshold, in: 5...50, step: 5)
                     }
 
-                    // Load / Mining
-                    Toggle("Mine XMR while draining", isOn: $settings.loadEnabled)
+                    // -- Load Settings --
+                    Text("Load Generation").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+
+                    Toggle("Generate load while draining", isOn: $settings.loadEnabled)
 
                     if settings.loadEnabled {
-                        if mining.isMining {
-                            HStack {
-                                Text("Mining: \(mining.status)")
-                                Spacer()
-                                Text(mining.hashrate).fontWeight(.medium).foregroundColor(.green)
+                        Picker("Method", selection: $settings.loadMethod) {
+                            ForEach(LoadMethod.allCases, id: \.rawValue) { method in
+                                Text(method.rawValue).tag(method.rawValue)
                             }
-                            .font(.caption)
-                        } else if engine.miningThrottled {
-                            Text("Mining paused — system busy (CPU/GPU > 80%)")
-                                .font(.caption).foregroundColor(.yellow)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if settings.selectedLoadMethod == .mine {
+                            VStack(alignment: .leading) {
+                                Text("XMR Wallet (empty = default)")
+                                    .font(.caption).foregroundColor(.secondary)
+                                TextField("Wallet address", text: $settings.walletAddress)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.caption, design: .monospaced))
+                            }
+
+                            if mining.isMining {
+                                HStack {
+                                    Text("Mining: \(mining.status)")
+                                    Spacer()
+                                    Text(mining.hashrate).fontWeight(.medium).foregroundColor(.green)
+                                }
+                                .font(.caption)
+                            }
+                        } else {
+                            Text("Stress test uses all CPU cores + GPU via Metal. No internet required.")
+                                .font(.caption).foregroundColor(.secondary)
+
+                            if stress.isRunning {
+                                HStack {
+                                    Text("Status:")
+                                    Text(stress.status).fontWeight(.medium).foregroundColor(.orange)
+                                }
+                                .font(.caption)
+                            }
                         }
 
-                        VStack(alignment: .leading) {
-                            Text("XMR Wallet (empty = default)")
-                                .font(.caption).foregroundColor(.secondary)
-                            TextField("Wallet address", text: $settings.walletAddress)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(.caption, design: .monospaced))
+                        if engine.loadThrottled {
+                            Text("Load paused — system busy (CPU/GPU > 80%)")
+                                .font(.caption).foregroundColor(.yellow)
                         }
                     }
+
+                    // -- Outlet Control --
+                    Text("Outlet Control").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {

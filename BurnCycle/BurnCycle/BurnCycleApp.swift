@@ -5,6 +5,7 @@ struct BurnCycleApp: App {
     @StateObject private var battery = BatteryMonitor()
     @StateObject private var charging = ChargingController()
     @StateObject private var mining = MiningManager()
+    @StateObject private var stress = StressManager()
     @StateObject private var settings = AppSettings()
     @StateObject private var system = SystemMonitor()
     @State private var engine: CycleEngine?
@@ -16,6 +17,7 @@ struct BurnCycleApp: App {
                     battery: battery,
                     engine: engine,
                     mining: mining,
+                    stress: stress,
                     charging: charging,
                     system: system,
                     settings: settings
@@ -27,6 +29,7 @@ struct BurnCycleApp: App {
                             battery: battery,
                             charging: charging,
                             mining: mining,
+                            stress: stress,
                             system: system,
                             settings: settings
                         )
