@@ -274,6 +274,8 @@ struct MainView: View {
             } else {
                 return "DRAINING"
             }
+        case .testing:
+            return "TESTING OUTLET"
         case .idle:
             return "IDLE"
         }
@@ -285,6 +287,8 @@ struct MainView: View {
             return battery.isPluggedIn ? .green : .yellow
         case .draining:
             return battery.isPluggedIn ? .yellow : .orange
+        case .testing:
+            return .blue
         case .idle:
             return .secondary
         }
@@ -296,6 +300,8 @@ struct MainView: View {
             return battery.isPluggedIn ? "bolt.fill" : "exclamationmark.triangle.fill"
         case .draining:
             return battery.isPluggedIn ? "exclamationmark.triangle.fill" : "flame.fill"
+        case .testing:
+            return "checkmark.circle"
         case .idle:
             return "moon.fill"
         }

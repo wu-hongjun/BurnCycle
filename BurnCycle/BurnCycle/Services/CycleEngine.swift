@@ -5,6 +5,7 @@ enum CycleState: String {
     case charging = "CHARGING"
     case draining = "DRAINING"
     case idle = "IDLE"
+    case testing = "TESTING"
 }
 
 @MainActor
@@ -59,9 +60,61 @@ final class CycleEngine: ObservableObject {
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        state = .testing
+        mismatchWarning = "Testing outlet control..."
         battery.update()
         system.update()
 
+        // Preflight: verify the shortcut actually controls power
+        runPreflightTest()
+    }
+
+    /// Test that shortcuts can toggle power on/off.
+    /// Turns outlet OFF, checks if AC disconnects, then restores.
+    private func runPreflightTest() {
+        let wasPluggedIn = battery.isPluggedIn
+
+        // Step 1: Turn outlet OFF
+        charging.stopCharging(shortcutName: settings.stopChargingShortcut)
+
+        // Step 2: Wait 8s for the shortcut to execute and power state to settle
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            battery.update()
+
+            let nowPluggedIn = battery.isPluggedIn
+
+            if wasPluggedIn && !nowPluggedIn {
+                // Shortcut works — outlet turned off successfully
+                // Step 3: Restore power and start cycling
+                mismatchWarning = "Outlet verified. Starting..."
+                charging.startCharging(shortcutName: settings.startChargingShortcut)
+
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                battery.update()
+                mismatchWarning = nil
+                beginCycling()
+
+            } else if wasPluggedIn && nowPluggedIn {
+                // Power didn't change — shortcut failed or multiple power sources
+                mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check that the shortcut controls the only power source (e.g. no Thunderbolt dock)."
+                isRunning = false
+                state = .idle
+
+            } else if !wasPluggedIn {
+                // Wasn't plugged in to begin with — can't test, just start
+                mismatchWarning = "No AC detected. Connect charger via the controlled outlet, then try again."
+                // Restore outlet ON so user can plug in
+                charging.startCharging(shortcutName: settings.startChargingShortcut)
+                isRunning = false
+                state = .idle
+            }
+        }
+    }
+
+    /// Actually begin the charge/drain cycle after preflight passes
+    private func beginCycling() {
+        battery.update()
         let pct = battery.percentage
         if pct >= Int(settings.upperThreshold) {
             transitionToDraining()
