@@ -1,6 +1,6 @@
 # BurnCycle
 
-A macOS app that automatically cycles your MacBook battery between configurable thresholds using a HomeKit smart outlet. Optionally mines Monero (XMR) during discharge to generate load and earn crypto from energy that would otherwise be wasted.
+A macOS app that automatically cycles your MacBook battery between configurable thresholds using a HomeKit smart outlet. 
 
 <img width="597" height="417" alt="image" src="https://github.com/user-attachments/assets/39ae44d2-a1c9-4b4f-b886-68bf4a08c78e" />
 
