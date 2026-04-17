@@ -69,45 +69,76 @@ final class CycleEngine: ObservableObject {
         runPreflightTest()
     }
 
-    /// Test that shortcuts can toggle power on/off.
-    /// Turns outlet OFF, checks if AC disconnects, then restores.
+    /// Test that shortcuts can toggle power by flipping the outlet and verifying the state changes.
+    /// Handles both initial states: outlet ON (plugged in) or outlet OFF (on battery).
     private func runPreflightTest() {
         let wasPluggedIn = battery.isPluggedIn
 
-        // Step 1: Turn outlet OFF
-        charging.stopCharging(shortcutName: settings.stopChargingShortcut)
-
-        // Step 2: Wait 8s for the shortcut to execute and power state to settle
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            battery.update()
+            if wasPluggedIn {
+                // Case A: Currently plugged in — test by turning OFF
+                mismatchWarning = "Testing: turning outlet OFF..."
+                charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
-            let nowPluggedIn = battery.isPluggedIn
-
-            if wasPluggedIn && !nowPluggedIn {
-                // Shortcut works — outlet turned off successfully
-                // Step 3: Restore power and start cycling
-                mismatchWarning = "Outlet verified. Starting..."
-                charging.startCharging(shortcutName: settings.startChargingShortcut)
-
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
                 battery.update()
-                mismatchWarning = nil
-                beginCycling()
 
-            } else if wasPluggedIn && nowPluggedIn {
-                // Power didn't change — shortcut failed or multiple power sources
-                mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check that the shortcut controls the only power source (e.g. no Thunderbolt dock)."
-                isRunning = false
-                state = .idle
+                if !battery.isPluggedIn {
+                    // OFF worked — now verify ON
+                    mismatchWarning = "Testing: turning outlet ON..."
+                    charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
 
-            } else if !wasPluggedIn {
-                // Wasn't plugged in to begin with — can't test, just start
-                mismatchWarning = "No AC detected. Connect charger via the controlled outlet, then try again."
-                // Restore outlet ON so user can plug in
-                charging.startCharging(shortcutName: settings.startChargingShortcut)
-                isRunning = false
-                state = .idle
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    battery.update()
+
+                    if battery.isPluggedIn {
+                        mismatchWarning = nil
+                        beginCycling()
+                    } else {
+                        mismatchWarning = "Outlet test failed: 'Start' shortcut didn't restore power."
+                        isRunning = false
+                        state = .idle
+                    }
+                } else {
+                    // Still plugged in after stop — multiple power sources or shortcut broken
+                    mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check for multiple power sources (e.g. Thunderbolt dock)."
+                    isRunning = false
+                    state = .idle
+                }
+            } else {
+                // Case B: Currently on battery — test by turning ON
+                mismatchWarning = "Testing: turning outlet ON..."
+                charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                battery.update()
+
+                if battery.isPluggedIn {
+                    // ON worked — now verify OFF
+                    mismatchWarning = "Testing: turning outlet OFF..."
+                    charging.stopCharging(shortcutName: settings.stopChargingShortcut)
+
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    battery.update()
+
+                    if !battery.isPluggedIn {
+                        // Both directions work — restore power and start
+                        charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+                        try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        battery.update()
+                        mismatchWarning = nil
+                        beginCycling()
+                    } else {
+                        mismatchWarning = "Outlet test failed: 'Stop' shortcut didn't disconnect power."
+                        isRunning = false
+                        state = .idle
+                    }
+                } else {
+                    // Didn't connect — cable not plugged in or shortcut broken
+                    mismatchWarning = "Outlet test failed: no power after 'Start' shortcut. Check that the charger cable is plugged into the controlled outlet."
+                    isRunning = false
+                    state = .idle
+                }
             }
         }
     }
@@ -134,6 +165,9 @@ final class CycleEngine: ObservableObject {
         timer?.invalidate()
         timer = nil
         stopAllLoad()
+        mismatchWarning = nil
+        retryCount = 0
+        verifyTicksRemaining = 0
         state = .idle
     }
 
@@ -141,6 +175,16 @@ final class CycleEngine: ObservableObject {
 
     private func onBatteryChanged(_ pct: Int) {
         guard isRunning else { return }
+
+        // Auto-clear mismatch warning when physical state matches expected
+        if mismatchWarning != nil {
+            let pluggedIn = battery.isPluggedIn
+            if (state == .charging && pluggedIn) || (state == .draining && !pluggedIn) {
+                mismatchWarning = nil
+                retryCount = 0
+                verifyTicksRemaining = 0
+            }
+        }
 
         // CRITICAL SAFETY: force charge at 5%, bypass cooldown
         if pct <= criticalBattery && state == .draining {
