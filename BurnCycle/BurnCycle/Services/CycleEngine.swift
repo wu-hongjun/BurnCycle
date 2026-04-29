@@ -24,6 +24,7 @@ final class CycleEngine: ObservableObject {
     private let settings: AppSettings
 
     private var timer: Timer?
+    private var preflightTask: Task<Void, Never>?
     private var settingsObserver: AnyCancellable?
     private var batteryObserver: AnyCancellable?
 
@@ -74,21 +75,23 @@ final class CycleEngine: ObservableObject {
     private func runPreflightTest() {
         let wasPluggedIn = battery.isPluggedIn
 
-        Task { @MainActor in
+        preflightTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             if wasPluggedIn {
                 // Case A: Currently plugged in — test by turning OFF
                 mismatchWarning = "Testing: turning outlet OFF..."
                 charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled || !isRunning { return }
                 battery.update()
 
                 if !battery.isPluggedIn {
-                    // OFF worked — now verify ON
                     mismatchWarning = "Testing: turning outlet ON..."
                     charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
 
                     try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    if Task.isCancelled || !isRunning { return }
                     battery.update()
 
                     if battery.isPluggedIn {
@@ -100,7 +103,6 @@ final class CycleEngine: ObservableObject {
                         state = .idle
                     }
                 } else {
-                    // Still plugged in after stop — multiple power sources or shortcut broken
                     mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check for multiple power sources (e.g. Thunderbolt dock)."
                     isRunning = false
                     state = .idle
@@ -111,20 +113,21 @@ final class CycleEngine: ObservableObject {
                 charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
 
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled || !isRunning { return }
                 battery.update()
 
                 if battery.isPluggedIn {
-                    // ON worked — now verify OFF
                     mismatchWarning = "Testing: turning outlet OFF..."
                     charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
                     try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    if Task.isCancelled || !isRunning { return }
                     battery.update()
 
                     if !battery.isPluggedIn {
-                        // Both directions work — restore power and start
                         charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
                         try? await Task.sleep(nanoseconds: 5_000_000_000)
+                        if Task.isCancelled || !isRunning { return }
                         battery.update()
                         mismatchWarning = nil
                         beginCycling()
@@ -134,7 +137,6 @@ final class CycleEngine: ObservableObject {
                         state = .idle
                     }
                 } else {
-                    // Didn't connect — cable not plugged in or shortcut broken
                     mismatchWarning = "Outlet test failed: no power after 'Start' shortcut. Check that the charger cable is plugged into the controlled outlet."
                     isRunning = false
                     state = .idle
@@ -164,6 +166,8 @@ final class CycleEngine: ObservableObject {
         isRunning = false
         timer?.invalidate()
         timer = nil
+        preflightTask?.cancel()
+        preflightTask = nil
         stopAllLoad()
         mismatchWarning = nil
         retryCount = 0
@@ -208,6 +212,11 @@ final class CycleEngine: ObservableObject {
         let wantLoad = settings.loadEnabled
         let wantMethod = settings.loadMethod
         let running = isLoadRunning()
+
+        // Clear throttle state when load is disabled — it's no longer relevant
+        if !wantLoad {
+            loadThrottled = false
+        }
 
         if wantLoad && !running && isExternalLoadSafe() {
             startLoad()

@@ -136,6 +136,7 @@ final class MiningManager: ObservableObject {
             } else if line.contains("login") && !line.contains("error") {
                 status = "Connecting..."
             } else if line.contains("connect error") || line.contains("login error") {
+                hashrate = "0 H/s"
                 if line.contains("connect error") {
                     let msg = line.components(separatedBy: "connect error:").last?
                         .trimmingCharacters(in: .whitespaces.union(.init(charactersIn: "\""))) ?? "Connection failed"

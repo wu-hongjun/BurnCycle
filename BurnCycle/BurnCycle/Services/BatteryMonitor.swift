@@ -115,6 +115,8 @@ final class BatteryMonitor: ObservableObject {
         if let amp = dict["Amperage"] as? Int, let v = dict["Voltage"] as? Int {
             let ampVal = Int64(bitPattern: UInt64(bitPattern: Int64(amp)))
             chargingWatts = abs(Double(ampVal) * Double(v)) / 1_000_000
+        } else {
+            chargingWatts = 0
         }
 
         // Current capacity in mAh
@@ -147,25 +149,23 @@ final class BatteryMonitor: ObservableObject {
             fullChargeCapacityMAh = fc
         }
 
-        // Read health from system_profiler (matches "About This Mac") — only once
-        if healthPercent == 0 {
-            Task.detached {
-                let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
-                proc.arguments = ["SPPowerDataType"]
-                let pipe = Pipe()
-                proc.standardOutput = pipe
-                try? proc.run()
-                proc.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8),
-                   let range = output.range(of: #"Maximum Capacity:\s+(\d+)%"#, options: .regularExpression) {
-                    let match = output[range]
-                    if let numRange = match.range(of: #"\d+"#, options: .regularExpression),
-                       let value = Int(match[numRange]) {
-                        await MainActor.run { [weak self] in
-                            self?.healthPercent = value
-                        }
+        // Read health from system_profiler (matches "About This Mac") — refreshed every 60s
+        Task.detached {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
+            proc.arguments = ["SPPowerDataType"]
+            let pipe = Pipe()
+            proc.standardOutput = pipe
+            try? proc.run()
+            proc.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8),
+               let range = output.range(of: #"Maximum Capacity:\s+(\d+)%"#, options: .regularExpression) {
+                let match = output[range]
+                if let numRange = match.range(of: #"\d+"#, options: .regularExpression),
+                   let value = Int(match[numRange]) {
+                    await MainActor.run { [weak self] in
+                        self?.healthPercent = value
                     }
                 }
             }
