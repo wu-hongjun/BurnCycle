@@ -29,7 +29,7 @@ final class CycleEngine: ObservableObject {
     private var batteryObserver: AnyCancellable?
 
     private let externalLoadThreshold: Double = 80
-    private let criticalBattery = 5
+    private let criticalBattery = 3
 
     private var activeLoadMethod: String?
     private var verifyTicksRemaining: Int = 0 // countdown ticks to verify power state

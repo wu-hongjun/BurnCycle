@@ -8,8 +8,8 @@ enum LoadMethod: String, CaseIterable {
 
 @MainActor
 final class AppSettings: ObservableObject {
-    @AppStorage("upperThreshold") var upperThreshold: Double = 95
-    @AppStorage("lowerThreshold") var lowerThreshold: Double = 10
+    @AppStorage("upperThreshold") var upperThreshold: Double = 90
+    @AppStorage("lowerThreshold") var lowerThreshold: Double = 5
     @AppStorage("loadEnabled") var loadEnabled: Bool = true
     @AppStorage("loadMethod") var loadMethod: String = LoadMethod.stress.rawValue
     @AppStorage("walletAddress") var walletAddress: String = ""
