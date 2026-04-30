@@ -1,70 +1,79 @@
 import SwiftUI
 import Combine
 
+/// Top-level container that owns all services. Creating one instance ensures
+/// all services exist before any view body runs — no optional engine, no splash race.
+@MainActor
+final class AppServices: ObservableObject {
+    let battery = BatteryMonitor()
+    let charging = ChargingController()
+    let mining = MiningManager()
+    let stress = StressManager()
+    let settings = AppSettings()
+    let system = SystemMonitor()
+    let history = HistoryRecorder()
+    let engine: CycleEngine
+
+    private var historyObserver: AnyCancellable?
+
+    init() {
+        // Initialise engine eagerly with the services above
+        self.engine = CycleEngine(
+            battery: battery,
+            charging: charging,
+            mining: mining,
+            stress: stress,
+            system: system,
+            settings: settings
+        )
+
+        // Start monitoring services
+        battery.startMonitoring()
+        system.startMonitoring()
+
+        // Record history snapshots when battery slow values change
+        historyObserver = battery.$cycleCount
+            .combineLatest(battery.$healthPercent, battery.$fullChargeCapacityMAh)
+            .sink { [weak self] cycle, health, capacity in
+                Task { @MainActor in
+                    self?.history.observe(cycleCount: cycle,
+                                          fullChargeCapacityMAh: capacity,
+                                          healthPercent: health)
+                }
+            }
+    }
+}
+
 @main
 struct BurnCycleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var battery = BatteryMonitor()
-    @StateObject private var charging = ChargingController()
-    @StateObject private var mining = MiningManager()
-    @StateObject private var stress = StressManager()
-    @StateObject private var settings = AppSettings()
-    @StateObject private var system = SystemMonitor()
-    @StateObject private var history = HistoryRecorder()
-    @State private var engine: CycleEngine?
-    @State private var historyObserver: AnyCancellable?
+    @StateObject private var services = AppServices()
 
     var body: some Scene {
         Window("BurnCycle", id: "main") {
-            if let engine = engine {
-                MainView(
-                    battery: battery,
-                    engine: engine,
-                    mining: mining,
-                    stress: stress,
-                    charging: charging,
-                    system: system,
-                    settings: settings,
-                    history: history
-                )
-            } else {
-                SplashView()
-                    .onAppear {
-                        engine = CycleEngine(
-                            battery: battery,
-                            charging: charging,
-                            mining: mining,
-                            stress: stress,
-                            system: system,
-                            settings: settings
-                        )
-                        battery.startMonitoring()
-                        system.startMonitoring()
-
-                        historyObserver = battery.$cycleCount
-                            .combineLatest(battery.$healthPercent, battery.$fullChargeCapacityMAh)
-                            .sink { cycle, health, capacity in
-                                Task { @MainActor in
-                                    history.observe(cycleCount: cycle,
-                                                    fullChargeCapacityMAh: capacity,
-                                                    healthPercent: health)
-                                }
-                            }
-                    }
-            }
+            MainView(
+                battery: services.battery,
+                engine: services.engine,
+                mining: services.mining,
+                stress: services.stress,
+                charging: services.charging,
+                system: services.system,
+                settings: services.settings,
+                history: services.history
+            )
         }
         .windowResizability(.contentSize)
 
-        // Menu bar status item with summary popover
-        MenuBarExtra(isInserted: $settings.showInMenuBar) {
-            if let engine = engine {
-                MenuBarPopover(battery: battery, engine: engine, mining: mining,
-                              stress: stress, settings: settings)
-            } else {
-                Text("Loading…").padding()
-            }
+        // Menu bar status item with summary popover (visibility bound to settings)
+        MenuBarExtra(isInserted: Binding(
+            get: { services.settings.showInMenuBar },
+            set: { services.settings.showInMenuBar = $0 }
+        )) {
+            MenuBarPopover(battery: services.battery, engine: services.engine,
+                           mining: services.mining, stress: services.stress,
+                           settings: services.settings)
         } label: {
-            MenuBarLabel(battery: battery, engine: engine)
+            MenuBarLabel(battery: services.battery, engine: services.engine)
         }
         .menuBarExtraStyle(.window)
     }
@@ -73,7 +82,7 @@ struct BurnCycleApp: App {
 /// Compact label rendered in the menu bar — shows battery % + state icon
 struct MenuBarLabel: View {
     @ObservedObject var battery: BatteryMonitor
-    let engine: CycleEngine?
+    @ObservedObject var engine: CycleEngine
 
     var body: some View {
         HStack(spacing: 4) {
@@ -83,7 +92,7 @@ struct MenuBarLabel: View {
     }
 
     private var iconName: String {
-        guard let engine, engine.isRunning else {
+        guard engine.isRunning else {
             return battery.isPluggedIn ? "battery.100.bolt" : "battery.50"
         }
         switch engine.state {
@@ -161,7 +170,7 @@ struct MenuBarPopover: View {
 
                 Button("Open Window") {
                     NSApp.activate(ignoringOtherApps: true)
-                    if let win = NSApp.windows.first(where: { $0.title.contains("BurnCycle") || $0.contentViewController != nil }) {
+                    if let win = NSApp.windows.first(where: { $0.canBecomeMain }) {
                         win.makeKeyAndOrderFront(nil)
                     } else {
                         openWindow(id: "main")
@@ -194,54 +203,7 @@ struct MenuBarPopover: View {
     }
 }
 
-/// Branded splash shown briefly while services finish initializing.
-/// Pinned to the same size as MainView so the Window doesn't resize on transition.
-/// No repeating animation here — `repeatForever` left lingering main-thread
-/// transactions that hung the UI even after the splash was replaced.
-struct SplashView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.orange.opacity(0.5), Color.orange.opacity(0)],
-                            center: .center,
-                            startRadius: 4,
-                            endRadius: 70
-                        )
-                    )
-                    .frame(width: 140, height: 140)
-
-                Image(systemName: "flame.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(red: 1.0, green: 0.55, blue: 0.10),
-                                     Color(red: 1.0, green: 0.85, blue: 0.30)],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
-                    .frame(width: 56, height: 56)
-                    .shadow(color: .orange.opacity(0.6), radius: 12)
-            }
-
-            Text("BurnCycle")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-
-            ProgressView()
-                .controlSize(.small)
-                .tint(.secondary)
-        }
-        .frame(width: 320, height: 240)
-    }
-}
-
 /// Reopen the main window when the dock icon is clicked or app is re-launched.
-/// Without this, closing the window with the menu-bar item still active leaves the app
-/// running with no visible UI and clicking the dock icon does nothing.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
