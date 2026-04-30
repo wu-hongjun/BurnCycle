@@ -16,7 +16,7 @@ final class AppSettings: ObservableObject {
     @AppStorage("startChargingShortcut") var startChargingShortcut: String = "Start Charging"
     @AppStorage("stopChargingShortcut") var stopChargingShortcut: String = "Stop Charging"
     @AppStorage("pauseOnSleep") var pauseOnSleep: Bool = true
-    @AppStorage("showInMenuBar") var showInMenuBar: Bool = true
+    @AppStorage("showInMenuBar") var showInMenuBar: Bool = false
 
     var selectedLoadMethod: LoadMethod {
         get { LoadMethod(rawValue: loadMethod) ?? .stress }
