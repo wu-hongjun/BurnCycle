@@ -24,7 +24,10 @@ BurnCycle controls your charger by running Apple Shortcuts that toggle a HomeKit
 3. Save
 
 !!! tip
-    Test both shortcuts manually first to make sure they toggle your outlet correctly.
+    Test both shortcuts manually first to make sure they toggle your outlet correctly. BurnCycle will also run a preflight test on every Start to verify the shortcuts actually work.
+
+!!! warning "Single Power Source Required"
+    Make sure your charger is the **only** power source connected. If you have a Thunderbolt dock, USB-C hub with PD passthrough, or other power adapter plugged in, the preflight test will fail because turning off the controlled outlet won't actually disconnect AC.
 
 ## Building the App
 
@@ -33,6 +36,8 @@ git clone https://github.com/wu-hongjun/BurnCycle.git
 cd BurnCycle
 ./build.sh
 ```
+
+The build script compiles the Swift Package Manager target, bundles the included `xmrig` arm64 binary, compiles the Liquid Glass app icon asset catalog, and produces `BurnCycle.app` at the repo root.
 
 ## Installing
 
@@ -46,5 +51,6 @@ open /Applications/BurnCycle.app
 1. Click **Settings**
 2. Verify shortcut names match yours (default: "Start Charging" / "Stop Charging")
 3. Use the **Test** buttons to confirm your outlet toggles
-4. Adjust thresholds if desired (default: charge to 95%, drain to 10%)
-5. Click **Start**
+4. Adjust thresholds if desired (default: charge to 90%, drain to 5%)
+5. Pick a load method (default: Stress Test, works offline)
+6. Click **Start** — BurnCycle runs a preflight test and begins cycling
