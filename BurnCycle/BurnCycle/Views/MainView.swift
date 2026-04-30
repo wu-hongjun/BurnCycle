@@ -265,6 +265,7 @@ struct MainView: View {
                             .symbolSize(20)
                         }
                         .chartYScale(domain: chartHealthDomain)
+                        .chartXScale(domain: chartCycleDomain)
                         .chartYAxisLabel("Health %")
                         .chartXAxisLabel("Cycle")
                         .frame(height: 100)
@@ -340,6 +341,16 @@ struct MainView: View {
         guard let lo = values.min(), let hi = values.max() else { return 0...100 }
         let pad: Int = max(2, (hi - lo) / 4)
         return max(0, lo - pad)...min(100, hi + pad)
+    }
+
+    /// X axis range — starts at the smallest recorded cycle, not 0
+    private var chartCycleDomain: ClosedRange<Int> {
+        let values: [Int] = history.entries.map { $0.cycleCount }
+        guard let lo = values.min(), let hi = values.max() else { return 0...1 }
+        // If only one unique cycle value, pad so the line is visible
+        if lo == hi { return (lo - 1)...(hi + 1) }
+        let pad: Int = max(1, (hi - lo) / 10)
+        return max(0, lo - pad)...(hi + pad)
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
