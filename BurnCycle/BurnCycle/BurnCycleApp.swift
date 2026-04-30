@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 @main
 struct BurnCycleApp: App {
@@ -8,7 +9,9 @@ struct BurnCycleApp: App {
     @StateObject private var stress = StressManager()
     @StateObject private var settings = AppSettings()
     @StateObject private var system = SystemMonitor()
+    @StateObject private var history = HistoryRecorder()
     @State private var engine: CycleEngine?
+    @State private var historyObserver: AnyCancellable?
 
     var body: some Scene {
         WindowGroup {
@@ -20,7 +23,8 @@ struct BurnCycleApp: App {
                     stress: stress,
                     charging: charging,
                     system: system,
-                    settings: settings
+                    settings: settings,
+                    history: history
                 )
             } else {
                 ProgressView()
@@ -35,6 +39,17 @@ struct BurnCycleApp: App {
                         )
                         battery.startMonitoring()
                         system.startMonitoring()
+
+                        // Record history snapshots whenever battery slow values change
+                        historyObserver = battery.$cycleCount
+                            .combineLatest(battery.$healthPercent, battery.$fullChargeCapacityMAh)
+                            .sink { cycle, health, capacity in
+                                Task { @MainActor in
+                                    history.observe(cycleCount: cycle,
+                                                    fullChargeCapacityMAh: capacity,
+                                                    healthPercent: health)
+                                }
+                            }
                     }
             }
         }

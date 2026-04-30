@@ -8,9 +8,11 @@ struct MainView: View {
     @ObservedObject var charging: ChargingController
     @ObservedObject var system: SystemMonitor
     @ObservedObject var settings: AppSettings
+    @ObservedObject var history: HistoryRecorder
 
     @State private var showSettings = false
     @State private var showInfo = false
+    @State private var showHistory = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -77,14 +79,21 @@ struct MainView: View {
             HStack {
                 Button("Settings") {
                     showSettings.toggle()
-                    if showSettings { showInfo = false }
+                    if showSettings { showInfo = false; showHistory = false }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
                 Button("Info") {
                     showInfo.toggle()
-                    if showInfo { showSettings = false }
+                    if showInfo { showSettings = false; showHistory = false }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("History") {
+                    showHistory.toggle()
+                    if showHistory { showSettings = false; showInfo = false }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -227,6 +236,61 @@ struct MainView: View {
                     }
                 }
                 .font(.caption)
+                .padding(.top, 4)
+            }
+
+            // History panel
+            if showHistory {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Cycle").fontWeight(.semibold).frame(width: 50, alignment: .leading)
+                        Text("Date").fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Capacity").fontWeight(.semibold).frame(width: 75, alignment: .trailing)
+                        Text("Health").fontWeight(.semibold).frame(width: 50, alignment: .trailing)
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                    Divider()
+
+                    if history.entries.isEmpty {
+                        Text("No history yet. Entries are recorded when battery cycle count or daily snapshot triggers.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 8)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 4) {
+                                ForEach(history.entries.reversed()) { entry in
+                                    HStack {
+                                        Text("\(entry.cycleCount)")
+                                            .frame(width: 50, alignment: .leading)
+                                        Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        Text("\(entry.fullChargeCapacityMAh) mAh")
+                                            .frame(width: 75, alignment: .trailing)
+                                        Text("\(entry.healthPercent)%")
+                                            .frame(width: 50, alignment: .trailing)
+                                            .foregroundColor(entry.healthPercent > 80 ? .green : entry.healthPercent > 50 ? .yellow : .red)
+                                    }
+                                    .font(.caption2)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 200)
+
+                        HStack {
+                            Text("\(history.entries.count) entries")
+                                .font(.caption2).foregroundColor(.secondary)
+                            Spacer()
+                            Button("Clear All") {
+                                history.clearAll()
+                            }
+                            .buttonStyle(.bordered).controlSize(.mini)
+                            .tint(.red)
+                        }
+                    }
+                }
                 .padding(.top, 4)
             }
         }
