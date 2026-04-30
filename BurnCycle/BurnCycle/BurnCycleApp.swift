@@ -28,7 +28,7 @@ struct BurnCycleApp: App {
                     history: history
                 )
             } else {
-                ProgressView()
+                SplashView()
                     .onAppear {
                         engine = CycleEngine(
                             battery: battery,
@@ -190,6 +190,59 @@ struct MenuBarPopover: View {
         case .draining: return .orange
         case .testing: return .blue
         case .idle: return .secondary
+        }
+    }
+}
+
+/// Branded splash shown briefly while services finish initializing.
+/// Pinned to the same width as MainView so the Window doesn't resize on transition.
+struct SplashView: View {
+    @State private var animate = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                // Glow halo
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.orange.opacity(0.5), Color.orange.opacity(0)],
+                            center: .center,
+                            startRadius: 4,
+                            endRadius: 70
+                        )
+                    )
+                    .frame(width: 140, height: 140)
+                    .scaleEffect(animate ? 1.0 : 0.7)
+                    .opacity(animate ? 1.0 : 0.4)
+
+                Image(systemName: "flame.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.55, blue: 0.10),
+                                     Color(red: 1.0, green: 0.85, blue: 0.30)],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                    .frame(width: 56, height: 56)
+                    .shadow(color: .orange.opacity(0.6), radius: 12)
+            }
+
+            Text("BurnCycle")
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+
+            ProgressView()
+                .controlSize(.small)
+                .tint(.secondary)
+        }
+        .frame(width: 320, height: 240)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                animate = true
+            }
         }
     }
 }
