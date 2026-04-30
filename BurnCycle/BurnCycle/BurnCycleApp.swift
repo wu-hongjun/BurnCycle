@@ -195,14 +195,13 @@ struct MenuBarPopover: View {
 }
 
 /// Branded splash shown briefly while services finish initializing.
-/// Pinned to the same width as MainView so the Window doesn't resize on transition.
+/// Pinned to the same size as MainView so the Window doesn't resize on transition.
+/// No repeating animation here — `repeatForever` left lingering main-thread
+/// transactions that hung the UI even after the splash was replaced.
 struct SplashView: View {
-    @State private var animate = false
-
     var body: some View {
         VStack(spacing: 16) {
             ZStack {
-                // Glow halo
                 Circle()
                     .fill(
                         RadialGradient(
@@ -213,8 +212,6 @@ struct SplashView: View {
                         )
                     )
                     .frame(width: 140, height: 140)
-                    .scaleEffect(animate ? 1.0 : 0.7)
-                    .opacity(animate ? 1.0 : 0.4)
 
                 Image(systemName: "flame.fill")
                     .resizable()
@@ -239,11 +236,6 @@ struct SplashView: View {
                 .tint(.secondary)
         }
         .frame(width: 320, height: 240)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                animate = true
-            }
-        }
     }
 }
 
