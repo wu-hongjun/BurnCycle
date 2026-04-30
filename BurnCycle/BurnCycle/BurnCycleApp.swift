@@ -3,6 +3,7 @@ import Combine
 
 @main
 struct BurnCycleApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var battery = BatteryMonitor()
     @StateObject private var charging = ChargingController()
     @StateObject private var mining = MiningManager()
@@ -14,7 +15,7 @@ struct BurnCycleApp: App {
     @State private var historyObserver: AnyCancellable?
 
     var body: some Scene {
-        WindowGroup {
+        Window("BurnCycle", id: "main") {
             if let engine = engine {
                 MainView(
                     battery: battery,
@@ -190,5 +191,20 @@ struct MenuBarPopover: View {
         case .testing: return .blue
         case .idle: return .secondary
         }
+    }
+}
+
+/// Reopen the main window when the dock icon is clicked or app is re-launched.
+/// Without this, closing the window with the menu-bar item still active leaves the app
+/// running with no visible UI and clicking the dock icon does nothing.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            for window in sender.windows where window.canBecomeMain {
+                window.makeKeyAndOrderFront(nil)
+            }
+            sender.activate(ignoringOtherApps: true)
+        }
+        return true
     }
 }
