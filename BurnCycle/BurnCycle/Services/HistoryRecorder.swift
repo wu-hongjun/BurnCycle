@@ -28,32 +28,27 @@ final class HistoryRecorder: ObservableObject {
     }()
 
     private var lastRecordedCycleCount: Int = -1
-    private var lastDailySnapshot: Date = .distantPast
 
     init() {
         load()
     }
 
-    /// Called periodically from BatteryMonitor updates.
+    /// Called whenever battery slow values change.
     /// Records a snapshot when:
-    ///  - Cycle count changes (every new cycle)
-    ///  - First entry of the day (daily snapshot)
+    ///  - First valid observation ever (no entries yet)
+    ///  - Cycle count differs from the last recorded entry
     func observe(cycleCount: Int, fullChargeCapacityMAh: Int, healthPercent: Int) {
         guard cycleCount > 0, fullChargeCapacityMAh > 0, healthPercent > 0 else { return }
 
-        let now = Date()
-        let cal = Calendar.current
+        let isFirstEver = entries.isEmpty
         let cycleChanged = cycleCount != lastRecordedCycleCount && lastRecordedCycleCount >= 0
-        let isNewDay = !cal.isDate(now, inSameDayAs: lastDailySnapshot)
-        let isFirstEver = lastRecordedCycleCount < 0 && entries.isEmpty
 
-        if cycleChanged || isNewDay || isFirstEver {
-            let entry = HistoryEntry(timestamp: now, cycleCount: cycleCount,
+        if isFirstEver || cycleChanged {
+            let entry = HistoryEntry(timestamp: Date(), cycleCount: cycleCount,
                                      fullChargeCapacityMAh: fullChargeCapacityMAh,
                                      healthPercent: healthPercent)
             entries.append(entry)
             save()
-            lastDailySnapshot = now
         }
 
         lastRecordedCycleCount = cycleCount
@@ -73,7 +68,6 @@ final class HistoryRecorder: ObservableObject {
         if let decoded = try? decoder.decode([HistoryEntry].self, from: data) {
             entries = decoded
             lastRecordedCycleCount = decoded.last?.cycleCount ?? -1
-            lastDailySnapshot = decoded.last?.timestamp ?? .distantPast
         }
     }
 

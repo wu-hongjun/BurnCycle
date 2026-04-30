@@ -259,6 +259,11 @@ struct MainView: View {
                             .foregroundColor(.secondary)
                             .padding(.vertical, 8)
                     } else {
+                        // Show up to 5 rows; scroll if more.
+                        // Each row ≈ 18pt (caption2 + 4 spacing).
+                        let rowHeight: CGFloat = 18
+                        let visibleRows = min(history.entries.count, 5)
+                        let scrollHeight = CGFloat(visibleRows) * rowHeight
                         ScrollView {
                             VStack(spacing: 4) {
                                 ForEach(history.entries.reversed()) { entry in
@@ -277,7 +282,7 @@ struct MainView: View {
                                 }
                             }
                         }
-                        .frame(maxHeight: 200)
+                        .frame(height: scrollHeight)
 
                         HStack {
                             Text("\(history.entries.count) entries")
