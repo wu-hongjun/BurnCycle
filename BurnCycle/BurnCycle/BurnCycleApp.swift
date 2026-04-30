@@ -40,7 +40,6 @@ struct BurnCycleApp: App {
                         battery.startMonitoring()
                         system.startMonitoring()
 
-                        // Record history snapshots whenever battery slow values change
                         historyObserver = battery.$cycleCount
                             .combineLatest(battery.$healthPercent, battery.$fullChargeCapacityMAh)
                             .sink { cycle, health, capacity in
@@ -54,5 +53,142 @@ struct BurnCycleApp: App {
             }
         }
         .windowResizability(.contentSize)
+
+        // Menu bar status item with summary popover
+        MenuBarExtra(isInserted: $settings.showInMenuBar) {
+            if let engine = engine {
+                MenuBarPopover(battery: battery, engine: engine, mining: mining,
+                              stress: stress, settings: settings)
+            } else {
+                Text("Loading…").padding()
+            }
+        } label: {
+            MenuBarLabel(battery: battery, engine: engine)
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+/// Compact label rendered in the menu bar — shows battery % + state icon
+struct MenuBarLabel: View {
+    @ObservedObject var battery: BatteryMonitor
+    let engine: CycleEngine?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: iconName)
+            Text("\(battery.percentage)%")
+        }
+    }
+
+    private var iconName: String {
+        guard let engine, engine.isRunning else {
+            return battery.isPluggedIn ? "battery.100.bolt" : "battery.50"
+        }
+        switch engine.state {
+        case .charging: return "bolt.fill"
+        case .draining: return "flame.fill"
+        case .testing: return "checkmark.circle"
+        case .idle: return "moon.fill"
+        }
+    }
+}
+
+/// Popover content shown when menu bar icon is clicked
+struct MenuBarPopover: View {
+    @ObservedObject var battery: BatteryMonitor
+    @ObservedObject var engine: CycleEngine
+    @ObservedObject var mining: MiningManager
+    @ObservedObject var stress: StressManager
+    @ObservedObject var settings: AppSettings
+
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("\(battery.percentage)%")
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                Spacer()
+                Text(engine.state.rawValue)
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundColor(stateColor)
+            }
+
+            Divider()
+
+            HStack {
+                Text("Health")
+                Spacer()
+                Text("\(battery.healthPercent)%")
+                    .foregroundColor(battery.healthPercent > 80 ? .green : battery.healthPercent > 50 ? .yellow : .red)
+            }
+            .font(.caption)
+
+            HStack {
+                Text("Cycles")
+                Spacer()
+                Text("\(battery.cycleCount)")
+            }
+            .font(.caption)
+
+            if mining.isMining {
+                HStack {
+                    Text("Mining")
+                    Spacer()
+                    Text(mining.hashrate).foregroundColor(.green)
+                }
+                .font(.caption)
+            } else if stress.isRunning {
+                HStack {
+                    Text("Stress")
+                    Spacer()
+                    Text("Active").foregroundColor(.orange)
+                }
+                .font(.caption)
+            }
+
+            Divider()
+
+            HStack(spacing: 8) {
+                Button(engine.isRunning ? "Stop" : "Start") {
+                    if engine.isRunning { engine.stop() } else { engine.start() }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .tint(engine.isRunning ? .red : .green)
+
+                Button("Open Window") {
+                    NSApp.activate(ignoringOtherApps: true)
+                    if let win = NSApp.windows.first(where: { $0.title.contains("BurnCycle") || $0.contentViewController != nil }) {
+                        win.makeKeyAndOrderFront(nil)
+                    } else {
+                        openWindow(id: "main")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+
+                Button("Quit") {
+                    engine.stop()
+                    NSApplication.shared.terminate(nil)
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(width: 260)
+    }
+
+    private var stateColor: Color {
+        switch engine.state {
+        case .charging: return .green
+        case .draining: return .orange
+        case .testing: return .blue
+        case .idle: return .secondary
+        }
     }
 }

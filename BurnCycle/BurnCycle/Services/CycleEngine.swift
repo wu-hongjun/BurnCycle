@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 enum CycleState: String {
     case charging = "CHARGING"
@@ -36,6 +37,10 @@ final class CycleEngine: ObservableObject {
     private var retryCount: Int = 0
     private let maxRetries = 3
 
+    private var wasRunningBeforeSleep = false
+    private var sleepObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
          stress: StressManager, system: SystemMonitor, settings: AppSettings) {
         self.battery = battery
@@ -55,6 +60,37 @@ final class CycleEngine: ObservableObject {
             Task { @MainActor in
                 self?.onBatteryChanged(pct)
             }
+        }
+
+        // System sleep awareness — pause cycling when Mac sleeps
+        let nc = NSWorkspace.shared.notificationCenter
+        sleepObserver = nc.addObserver(forName: NSWorkspace.willSleepNotification,
+                                        object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.handleSleep() }
+        }
+        wakeObserver = nc.addObserver(forName: NSWorkspace.didWakeNotification,
+                                       object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.handleWake() }
+        }
+    }
+
+    private func handleSleep() {
+        guard settings.pauseOnSleep else { return }
+        if isRunning {
+            wasRunningBeforeSleep = true
+            stop()
+            mismatchWarning = "Paused for sleep"
+        }
+    }
+
+    private func handleWake() {
+        guard settings.pauseOnSleep, wasRunningBeforeSleep else { return }
+        wasRunningBeforeSleep = false
+        // Defer slightly so battery state reflects wake conditions
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            mismatchWarning = nil
+            self.start()
         }
     }
 

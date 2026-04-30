@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct MainView: View {
     @ObservedObject var battery: BatteryMonitor
@@ -199,6 +200,10 @@ struct MainView: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
+                    Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
+                    Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
+
                     HStack {
                         Spacer()
                         Button("Quit BurnCycle") {
@@ -242,10 +247,36 @@ struct MainView: View {
             // History panel
             if showHistory {
                 VStack(alignment: .leading, spacing: 6) {
+                    // Chart of health % over cycle count (only meaningful with 2+ entries)
+                    if history.entries.count >= 2 {
+                        Chart(history.entries) { entry in
+                            LineMark(
+                                x: .value("Cycle", entry.cycleCount),
+                                y: .value("Health %", entry.healthPercent)
+                            )
+                            .foregroundStyle(.green)
+                            .interpolationMethod(.monotone)
+
+                            PointMark(
+                                x: .value("Cycle", entry.cycleCount),
+                                y: .value("Health %", entry.healthPercent)
+                            )
+                            .foregroundStyle(.green)
+                            .symbolSize(20)
+                        }
+                        .chartYScale(domain: chartHealthDomain)
+                        .chartYAxisLabel("Health %")
+                        .chartXAxisLabel("Cycle")
+                        .frame(height: 100)
+                        .padding(.bottom, 4)
+
+                        Divider()
+                    }
+
                     HStack {
-                        Text("Cycle").fontWeight(.semibold).frame(width: 50, alignment: .leading)
+                        Text("Cycle").fontWeight(.semibold).frame(width: 45, alignment: .leading)
                         Text("Date").fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Capacity").fontWeight(.semibold).frame(width: 75, alignment: .trailing)
+                        Text("Capacity (mAh)").fontWeight(.semibold).frame(width: 90, alignment: .trailing)
                         Text("Health").fontWeight(.semibold).frame(width: 50, alignment: .trailing)
                     }
                     .font(.caption2)
@@ -254,7 +285,7 @@ struct MainView: View {
                     Divider()
 
                     if history.entries.isEmpty {
-                        Text("No history yet. Entries are recorded when battery cycle count or daily snapshot triggers.")
+                        Text("No history yet. An entry is recorded on first observation and on every cycle count change.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .padding(.vertical, 8)
@@ -269,11 +300,11 @@ struct MainView: View {
                                 ForEach(history.entries.reversed()) { entry in
                                     HStack {
                                         Text("\(entry.cycleCount)")
-                                            .frame(width: 50, alignment: .leading)
+                                            .frame(width: 45, alignment: .leading)
                                         Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
                                             .frame(maxWidth: .infinity, alignment: .leading)
-                                        Text("\(entry.fullChargeCapacityMAh) mAh")
-                                            .frame(width: 75, alignment: .trailing)
+                                        Text("\(entry.fullChargeCapacityMAh)")
+                                            .frame(width: 90, alignment: .trailing)
                                         Text("\(entry.healthPercent)%")
                                             .frame(width: 50, alignment: .trailing)
                                             .foregroundColor(entry.healthPercent > 80 ? .green : entry.healthPercent > 50 ? .yellow : .red)
@@ -301,6 +332,14 @@ struct MainView: View {
         }
         .padding(16)
         .frame(width: 320)
+    }
+
+    /// Auto-zoom Y axis around recorded health values for clearer trend visibility
+    private var chartHealthDomain: ClosedRange<Int> {
+        let values: [Int] = history.entries.map { $0.healthPercent }
+        guard let lo = values.min(), let hi = values.max() else { return 0...100 }
+        let pad: Int = max(2, (hi - lo) / 4)
+        return max(0, lo - pad)...min(100, hi + pad)
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
