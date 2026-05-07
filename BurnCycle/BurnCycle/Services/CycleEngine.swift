@@ -15,7 +15,11 @@ final class CycleEngine: ObservableObject {
     @Published var cycleCount: Int = 0
     @Published var isRunning: Bool = false
     @Published var loadThrottled: Bool = false
-    @Published var mismatchWarning: String?
+
+    /// Transient progress message for an in-flight operation (gray in UI).
+    @Published var statusMessage: String?
+    /// Sticky error the user should act on (orange in UI).
+    @Published var errorMessage: String?
 
     private let battery: BatteryMonitor
     private let charging: ChargingController
@@ -39,6 +43,13 @@ final class CycleEngine: ObservableObject {
     private var verifyTicksRemaining: Int = 0 // countdown ticks to verify power state
     private var retryCount: Int = 0
     private let maxRetries = 3
+
+    // Throttle hysteresis — require N consecutive ticks before flipping load on/off
+    // to avoid self-oscillation when our own load pushes CPU near 100%.
+    private var consecutiveHighLoadTicks: Int = 0
+    private var consecutiveLowLoadTicks: Int = 0
+    private let highLoadStopThreshold: Int = 3   // need 3 ticks (~30s) of "too hot" to stop
+    private let lowLoadResumeThreshold: Int = 6  // need 6 ticks (~60s) of "cool" to resume
 
     private var wasRunningBeforeSleep = false
     private var sleepObserver: NSObjectProtocol?
@@ -79,12 +90,33 @@ final class CycleEngine: ObservableObject {
         }
     }
 
+    // MARK: - Message routing helpers
+    //
+    // All message assignments go through these helpers so the routing is greppable.
+    // - setStatus: transient "we're working on it" — gray.
+    // - setError:  user must act — orange. Clears any in-flight status.
+    // - clearMessages: operation succeeded or moved on — clear both.
+
+    private func setStatus(_ s: String?) {
+        statusMessage = s
+    }
+
+    private func setError(_ e: String?) {
+        errorMessage = e
+        if e != nil { statusMessage = nil }
+    }
+
+    private func clearMessages() {
+        statusMessage = nil
+        errorMessage = nil
+    }
+
     private func handleSleep() {
         guard settings.pauseOnSleep else { return }
         if isRunning {
             wasRunningBeforeSleep = true
             stop()
-            mismatchWarning = "Paused for sleep"
+            setStatus("Paused for sleep")
         }
     }
 
@@ -94,7 +126,7 @@ final class CycleEngine: ObservableObject {
         // Defer slightly so battery state reflects wake conditions
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            mismatchWarning = nil
+            clearMessages()
             self.startAfterWake()
         }
     }
@@ -105,7 +137,7 @@ final class CycleEngine: ObservableObject {
     private func startAfterWake() {
         guard !isRunning else { return }
         isRunning = true
-        mismatchWarning = nil
+        clearMessages()
         battery.update()
         system.update()
         beginCycling()
@@ -118,7 +150,7 @@ final class CycleEngine: ObservableObject {
         if let last = lastSuccessfulPreflight,
            Date().timeIntervalSince(last) < preflightCacheTTL {
             isRunning = true
-            mismatchWarning = nil
+            clearMessages()
             battery.update()
             system.update()
             beginCycling()
@@ -127,13 +159,25 @@ final class CycleEngine: ObservableObject {
 
         isRunning = true
         state = .testing
-        mismatchWarning = "Testing outlet control..."
+        clearMessages()
+        setStatus("Testing outlet control...")
         battery.update()
         system.update()
 
         // Preflight: verify the shortcut actually controls power
         runPreflightTest()
     }
+
+    /// User-initiated cache invalidation. The next `start()` will re-run preflight
+    /// instead of skipping. No-op if no cache exists or if the engine is currently
+    /// running (don't disturb an active cycle).
+    func invalidatePreflightCache() {
+        guard !isRunning else { return }
+        lastSuccessfulPreflight = nil
+    }
+
+    /// Read-only view of the cache state for UI affordance enable/disable.
+    var hasCachedPreflight: Bool { lastSuccessfulPreflight != nil }
 
     /// Test that shortcuts can toggle power by flipping the outlet and verifying the state changes.
     /// Handles both initial states: outlet ON (plugged in) or outlet OFF (on battery).
@@ -144,7 +188,7 @@ final class CycleEngine: ObservableObject {
             guard let self else { return }
             if wasPluggedIn {
                 // Case A: Currently plugged in — test by turning OFF
-                mismatchWarning = "Testing: turning outlet OFF..."
+                setStatus("Testing: turning outlet OFF...")
                 charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
@@ -152,7 +196,7 @@ final class CycleEngine: ObservableObject {
                 battery.update()
 
                 if !battery.isPluggedIn {
-                    mismatchWarning = "Testing: turning outlet ON..."
+                    setStatus("Testing: turning outlet ON...")
                     charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
 
                     try? await Task.sleep(nanoseconds: 8_000_000_000)
@@ -160,24 +204,24 @@ final class CycleEngine: ObservableObject {
                     battery.update()
 
                     if battery.isPluggedIn {
-                        mismatchWarning = nil
+                        clearMessages()
                         lastSuccessfulPreflight = Date()
                         beginCycling()
                     } else {
-                        mismatchWarning = "Outlet test failed: 'Start' shortcut didn't restore power."
+                        setError("Outlet test failed: 'Start' shortcut didn't restore power.")
                         lastSuccessfulPreflight = nil
                         isRunning = false
                         state = .idle
                     }
                 } else {
-                    mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check for multiple power sources (e.g. Thunderbolt dock)."
+                    setError("Outlet test failed: still charging after 'Stop' shortcut. Check for multiple power sources (e.g. Thunderbolt dock).")
                     lastSuccessfulPreflight = nil
                     isRunning = false
                     state = .idle
                 }
             } else {
                 // Case B: Currently on battery — test by turning ON
-                mismatchWarning = "Testing: turning outlet ON..."
+                setStatus("Testing: turning outlet ON...")
                 charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
 
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
@@ -185,7 +229,7 @@ final class CycleEngine: ObservableObject {
                 battery.update()
 
                 if battery.isPluggedIn {
-                    mismatchWarning = "Testing: turning outlet OFF..."
+                    setStatus("Testing: turning outlet OFF...")
                     charging.stopCharging(shortcutName: settings.stopChargingShortcut)
 
                     try? await Task.sleep(nanoseconds: 8_000_000_000)
@@ -197,17 +241,17 @@ final class CycleEngine: ObservableObject {
                         try? await Task.sleep(nanoseconds: 5_000_000_000)
                         if Task.isCancelled || !isRunning { return }
                         battery.update()
-                        mismatchWarning = nil
+                        clearMessages()
                         lastSuccessfulPreflight = Date()
                         beginCycling()
                     } else {
-                        mismatchWarning = "Outlet test failed: 'Stop' shortcut didn't disconnect power."
+                        setError("Outlet test failed: 'Stop' shortcut didn't disconnect power.")
                         lastSuccessfulPreflight = nil
                         isRunning = false
                         state = .idle
                     }
                 } else {
-                    mismatchWarning = "Outlet test failed: no power after 'Start' shortcut. Check that the charger cable is plugged into the controlled outlet."
+                    setError("Outlet test failed: no power after 'Start' shortcut. Check that the charger cable is plugged into the controlled outlet.")
                     lastSuccessfulPreflight = nil
                     isRunning = false
                     state = .idle
@@ -240,9 +284,10 @@ final class CycleEngine: ObservableObject {
         preflightTask?.cancel()
         preflightTask = nil
         stopAllLoad()
-        mismatchWarning = nil
+        clearMessages()
         retryCount = 0
         verifyTicksRemaining = 0
+        resetThrottleHysteresis()
         state = .idle
     }
 
@@ -251,11 +296,11 @@ final class CycleEngine: ObservableObject {
     private func onBatteryChanged(_ pct: Int) {
         guard isRunning else { return }
 
-        // Auto-clear mismatch warning when physical state matches expected
-        if mismatchWarning != nil {
+        // Auto-clear active error/status when physical state matches expected
+        if errorMessage != nil || statusMessage != nil {
             let pluggedIn = battery.isPluggedIn
             if (state == .charging && pluggedIn) || (state == .draining && !pluggedIn) {
-                mismatchWarning = nil
+                clearMessages()
                 retryCount = 0
                 verifyTicksRemaining = 0
             }
@@ -327,11 +372,11 @@ final class CycleEngine: ObservableObject {
             // Expected charging but not plugged in — shortcut failed or cable not connected
             if retryCount < maxRetries {
                 retryCount += 1
-                mismatchWarning = "Outlet not responding (retry \(retryCount)/\(maxRetries))..."
+                setStatus("Outlet not responding (retry \(retryCount)/\(maxRetries))...")
                 charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
                 verifyTicksRemaining = 2 // check again in ~20s
             } else {
-                mismatchWarning = "Charger not detected. Check cable and outlet."
+                setError("Charger not detected. Check cable and outlet.")
                 retryCount = 0
                 // Outlet just stopped responding — invalidate the preflight
                 // cache so the next Start re-runs the test instead of skipping.
@@ -341,17 +386,17 @@ final class CycleEngine: ObservableObject {
             // Expected draining but still plugged in
             if retryCount < maxRetries {
                 retryCount += 1
-                mismatchWarning = "Outlet not responding (retry \(retryCount)/\(maxRetries))..."
+                setStatus("Outlet not responding (retry \(retryCount)/\(maxRetries))...")
                 charging.stopCharging(shortcutName: settings.stopChargingShortcut)
                 verifyTicksRemaining = 2
             } else {
-                mismatchWarning = "Still charging. Check outlet and shortcut."
+                setError("Still charging. Check outlet and shortcut.")
                 retryCount = 0
                 lastSuccessfulPreflight = nil
             }
         } else {
-            // State matches — clear warnings
-            mismatchWarning = nil
+            // State matches — clear messages
+            clearMessages()
             retryCount = 0
         }
     }
@@ -380,26 +425,46 @@ final class CycleEngine: ObservableObject {
         mining.isMining || stress.isRunning
     }
 
+    private func resetThrottleHysteresis() {
+        consecutiveHighLoadTicks = 0
+        consecutiveLowLoadTicks = 0
+    }
+
     private func manageLoad() {
         guard settings.loadEnabled else { return }
 
-        // Safety margin: stop load 3% above threshold
+        // Safety margin: stop load 3% above threshold (unchanged)
         let safetyMargin = Int(settings.lowerThreshold) + 3
         if battery.percentage <= safetyMargin && isLoadRunning() {
             stopAllLoad()
+            resetThrottleHysteresis()
             return
         }
 
-        // Check if external apps are using heavy resources
-        // (our own load doesn't count — subtract approximate baseline)
+        let externalSafe = isExternalLoadSafe()
+
         if isLoadRunning() {
-            if !isExternalLoadSafe() {
-                stopAllLoad()
-                loadThrottled = true
+            if !externalSafe {
+                consecutiveHighLoadTicks += 1
+                consecutiveLowLoadTicks = 0
+                if consecutiveHighLoadTicks >= highLoadStopThreshold {
+                    stopAllLoad()
+                    loadThrottled = true
+                    consecutiveHighLoadTicks = 0
+                }
+            } else {
+                consecutiveHighLoadTicks = 0
             }
         } else if loadThrottled {
-            if isExternalLoadSafe() && battery.percentage > safetyMargin {
-                startLoad()
+            if externalSafe && battery.percentage > safetyMargin {
+                consecutiveLowLoadTicks += 1
+                consecutiveHighLoadTicks = 0
+                if consecutiveLowLoadTicks >= lowLoadResumeThreshold {
+                    startLoad()
+                    consecutiveLowLoadTicks = 0
+                }
+            } else {
+                consecutiveLowLoadTicks = 0
             }
         }
     }
@@ -423,7 +488,12 @@ final class CycleEngine: ObservableObject {
         charging.startCharging(shortcutName: settings.startChargingShortcut)
         state = .charging
         verifyTicksRemaining = 2 // verify in ~20s
-        mismatchWarning = nil
+        resetThrottleHysteresis()
+        // A drain just finished — meaningful moment to refresh battery health.
+        // The call is internally throttled to once per hour, so adding it here
+        // is safe even on rapid cycles.
+        battery.refreshHealth()
+        clearMessages()
     }
 
     private func transitionToDraining() {
@@ -437,6 +507,7 @@ final class CycleEngine: ObservableObject {
         }
         state = .draining
         verifyTicksRemaining = 2
-        mismatchWarning = nil
+        resetThrottleHysteresis()
+        clearMessages()
     }
 }

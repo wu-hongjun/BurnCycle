@@ -72,8 +72,11 @@ struct MainView: View {
             if let error = charging.lastError {
                 Text(error).font(.caption2).foregroundColor(.red)
             }
-            if let warning = engine.mismatchWarning {
-                Text(warning).font(.caption2).foregroundColor(.orange)
+            if let err = engine.errorMessage {
+                Text(err).font(.caption2).foregroundColor(.orange)
+            }
+            if let status = engine.statusMessage {
+                Text(status).font(.caption2).foregroundColor(.secondary)
             }
 
             // Controls
@@ -198,6 +201,16 @@ struct MainView: View {
                         }
                         TextField("Shortcut name", text: $settings.stopChargingShortcut)
                             .textFieldStyle(.roundedBorder)
+
+                        HStack {
+                            Spacer()
+                            Button("Re-test outlet on next Start") {
+                                engine.invalidatePreflightCache()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(engine.isRunning || !engine.hasCachedPreflight)
+                        }
                     }
 
                     Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
