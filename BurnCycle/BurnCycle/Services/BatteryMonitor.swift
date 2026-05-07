@@ -22,11 +22,21 @@ final class BatteryMonitor: ObservableObject {
     @Published var voltage: Double = 0           // V
 
     private var fastTimer: Timer?  // 2s — battery %, charging state, charger watts
-    private var slowTimer: Timer?  // 60s — cycle count, health (rarely changes)
+    private var slowTimer: Timer?  // 60s — cycle count, IORegistry-only (cheap reads)
+    private var healthTimer: Timer? // 1h — system_profiler health read (expensive subprocess)
+
+    // Throttle for `system_profiler` reads. Battery health changes at most once per
+    // week, so spawning a subprocess every 60s is wasteful.
+    private var lastHealthRead: Date = .distantPast
+    private let healthMinInterval: TimeInterval = 60 * 60   // 1 hour
 
     init() {
         updateFast()
         updateSlow()
+        // Populate `healthPercent` on cold launch. Setting `lastHealthRead` here
+        // ensures that an on-demand `refreshHealth()` call within the next hour
+        // is correctly suppressed.
+        refreshHealthDetail()
     }
 
     func startMonitoring() {
@@ -41,6 +51,13 @@ final class BatteryMonitor: ObservableObject {
                 self?.updateSlow()
             }
         }
+        // Hourly system_profiler refresh. Fires `refreshHealthDetail` directly,
+        // bypassing the throttle — the timer interval IS the throttle.
+        healthTimer = Timer.scheduledTimer(withTimeInterval: healthMinInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshHealthDetail()
+            }
+        }
     }
 
     func stopMonitoring() {
@@ -48,11 +65,20 @@ final class BatteryMonitor: ObservableObject {
         fastTimer = nil
         slowTimer?.invalidate()
         slowTimer = nil
+        healthTimer?.invalidate()
+        healthTimer = nil
     }
 
     /// Called externally for immediate refresh (e.g. on cycle engine tick)
     func update() {
         updateFast()
+    }
+
+    /// Trigger a fresh health read. No-op if a read happened recently
+    /// (within `healthMinInterval`) — caller doesn't need to throttle.
+    func refreshHealth() {
+        if Date().timeIntervalSince(lastHealthRead) < healthMinInterval { return }
+        refreshHealthDetail()
     }
 
     // MARK: - Fast updates (2s) — battery %, power source, charger
@@ -125,7 +151,7 @@ final class BatteryMonitor: ObservableObject {
         }
     }
 
-    // MARK: - Slow updates (60s) — cycle count, health
+    // MARK: - Slow updates (60s) — cycle count, capacity (IORegistry only, cheap)
 
     private func updateSlow() {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
@@ -148,9 +174,17 @@ final class BatteryMonitor: ObservableObject {
         if let fc = dict["AppleRawMaxCapacity"] as? Int {
             fullChargeCapacityMAh = fc
         }
+    }
 
-        // Read health from system_profiler (matches "About This Mac") — refreshed every 60s
-        Task.detached {
+    // MARK: - Hourly / on-demand health (system_profiler subprocess)
+
+    /// Spawns `/usr/sbin/system_profiler` to read "Maximum Capacity" — matches
+    /// the value shown in About This Mac. Heavy (~1-2s, ~50MB RAM), so this is
+    /// gated to once per `healthMinInterval` via `refreshHealth()`.
+    /// The timer fires this directly (the timer interval is the throttle).
+    private func refreshHealthDetail() {
+        lastHealthRead = Date()
+        Task.detached { [weak self] in
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
             proc.arguments = ["SPPowerDataType"]
@@ -164,7 +198,7 @@ final class BatteryMonitor: ObservableObject {
                 let match = output[range]
                 if let numRange = match.range(of: #"\d+"#, options: .regularExpression),
                    let value = Int(match[numRange]) {
-                    await MainActor.run { [weak self] in
+                    await MainActor.run {
                         self?.healthPercent = value
                     }
                 }
