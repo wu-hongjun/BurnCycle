@@ -31,6 +31,9 @@ final class CycleEngine: ObservableObject {
 
     private let externalLoadThreshold: Double = 80
     private let criticalBattery = 3
+    private let preflightCacheTTL: TimeInterval = 30 * 60   // 30 minutes
+
+    private var lastSuccessfulPreflight: Date?
 
     private var activeLoadMethod: String?
     private var verifyTicksRemaining: Int = 0 // countdown ticks to verify power state
@@ -50,11 +53,13 @@ final class CycleEngine: ObservableObject {
         self.system = system
         self.settings = settings
 
-        settingsObserver = settings.objectWillChange.sink { [weak self] _ in
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 1_000_000); self?.onSettingsChanged()
+        settingsObserver = settings.objectWillChange
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.onSettingsChanged()
+                }
             }
-        }
 
         batteryObserver = battery.$percentage.sink { [weak self] pct in
             Task { @MainActor in
@@ -90,12 +95,36 @@ final class CycleEngine: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             mismatchWarning = nil
-            self.start()
+            self.startAfterWake()
         }
+    }
+
+    /// Fast resume after sleep — bypasses preflight unconditionally.
+    /// The cycle was running before sleep so preflight had already succeeded;
+    /// any drift will be caught by `verifyPowerState` within ~20s.
+    private func startAfterWake() {
+        guard !isRunning else { return }
+        isRunning = true
+        mismatchWarning = nil
+        battery.update()
+        system.update()
+        beginCycling()
     }
 
     func start() {
         guard !isRunning else { return }
+
+        // Skip preflight if we have a recent successful result cached.
+        if let last = lastSuccessfulPreflight,
+           Date().timeIntervalSince(last) < preflightCacheTTL {
+            isRunning = true
+            mismatchWarning = nil
+            battery.update()
+            system.update()
+            beginCycling()
+            return
+        }
+
         isRunning = true
         state = .testing
         mismatchWarning = "Testing outlet control..."
@@ -132,14 +161,17 @@ final class CycleEngine: ObservableObject {
 
                     if battery.isPluggedIn {
                         mismatchWarning = nil
+                        lastSuccessfulPreflight = Date()
                         beginCycling()
                     } else {
                         mismatchWarning = "Outlet test failed: 'Start' shortcut didn't restore power."
+                        lastSuccessfulPreflight = nil
                         isRunning = false
                         state = .idle
                     }
                 } else {
                     mismatchWarning = "Outlet test failed: still charging after 'Stop' shortcut. Check for multiple power sources (e.g. Thunderbolt dock)."
+                    lastSuccessfulPreflight = nil
                     isRunning = false
                     state = .idle
                 }
@@ -166,14 +198,17 @@ final class CycleEngine: ObservableObject {
                         if Task.isCancelled || !isRunning { return }
                         battery.update()
                         mismatchWarning = nil
+                        lastSuccessfulPreflight = Date()
                         beginCycling()
                     } else {
                         mismatchWarning = "Outlet test failed: 'Stop' shortcut didn't disconnect power."
+                        lastSuccessfulPreflight = nil
                         isRunning = false
                         state = .idle
                     }
                 } else {
                     mismatchWarning = "Outlet test failed: no power after 'Start' shortcut. Check that the charger cable is plugged into the controlled outlet."
+                    lastSuccessfulPreflight = nil
                     isRunning = false
                     state = .idle
                 }
