@@ -333,6 +333,9 @@ final class CycleEngine: ObservableObject {
             } else {
                 mismatchWarning = "Charger not detected. Check cable and outlet."
                 retryCount = 0
+                // Outlet just stopped responding — invalidate the preflight
+                // cache so the next Start re-runs the test instead of skipping.
+                lastSuccessfulPreflight = nil
             }
         } else if state == .draining && pluggedIn {
             // Expected draining but still plugged in
@@ -344,6 +347,7 @@ final class CycleEngine: ObservableObject {
             } else {
                 mismatchWarning = "Still charging. Check outlet and shortcut."
                 retryCount = 0
+                lastSuccessfulPreflight = nil
             }
         } else {
             // State matches — clear warnings
