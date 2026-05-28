@@ -12,7 +12,6 @@ final class AppServices: ObservableObject {
     let settings = AppSettings()
     let system = SystemMonitor()
     let history = HistoryRecorder()
-    let brightness = BrightnessController()
     let engine: CycleEngine
 
     private var historyObserver: AnyCancellable?
@@ -25,8 +24,7 @@ final class AppServices: ObservableObject {
             mining: mining,
             stress: stress,
             system: system,
-            settings: settings,
-            brightness: brightness
+            settings: settings
         )
 
         // Start monitoring services
@@ -71,8 +69,7 @@ struct BurnCycleApp: App {
                 charging: services.charging,
                 system: services.system,
                 settings: services.settings,
-                history: services.history,
-                brightness: services.brightness
+                history: services.history
             )
         }
         .windowResizability(.contentSize)

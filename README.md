@@ -36,7 +36,6 @@ Load is smart — it auto-throttles when system is already under heavy load (>80
 - **History tab** — persistent log of cycle count, capacity, and health over time
 - **Real-time monitoring** — battery %, CPU %, GPU % (via IOReport, matches mactop), power draw
 - **Menu-bar mode** — optional `MenuBarExtra` with battery %, state, and Start/Stop, toggled live from Settings
-- **Dim screen while charging** (opt-in) — drops display brightness to a configurable level during the charge phase to charge slightly faster, restores it on drain
 - **Liquid Glass icon** — refined for macOS 26 aesthetic
 - **Zero config** — wallet, pool, and xmrig binary all bundled (xmrig is SHA-256-verified at every launch)
 
