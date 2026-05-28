@@ -1,5 +1,7 @@
 # Performance & energy audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10  
 **Scope:** BurnCycle macOS app — idle-state energy cost, polling cadences, SwiftUI render pressure, disk I/O, memory  
 **Auditor:** codex-reviewer (automated static analysis)  

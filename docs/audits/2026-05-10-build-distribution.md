@@ -1,5 +1,7 @@
 # Build & Distribution Audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10
 **App:** BurnCycle
 **Auditor:** Automated build/packaging review

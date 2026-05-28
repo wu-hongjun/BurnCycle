@@ -1,4 +1,6 @@
 ---
+
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
 date: 2026-05-10
 title: "Concurrency audit"
 ---
