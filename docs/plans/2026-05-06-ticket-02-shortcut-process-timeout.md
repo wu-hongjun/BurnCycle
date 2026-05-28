@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `fad124f` (fix: make ChargingController resilient to CoAP flakiness) — 20s watchdog with `TimeoutFlag` (NSLock-guarded) terminates hung `shortcuts` invocations. See `ChargingController.swift`.
+
 # Ticket 02 — Add timeout to `shortcuts` subprocess
 
 **Severity:** Critical

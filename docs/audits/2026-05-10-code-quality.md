@@ -1,5 +1,7 @@
 # Code quality & Swift idioms audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10  
 **Scope:** `BurnCycle/BurnCycle/` — 10 Swift files, ~2 000 lines  
 **Swift tools version:** 6.0 · Target: macOS 14  

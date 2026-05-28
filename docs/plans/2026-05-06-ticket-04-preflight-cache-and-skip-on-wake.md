@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `d6ac33f` (fix: cache preflight result and debounce settings observer) with follow-up `18b4aaa` (fix: invalidate preflight cache when verifyPowerState gives up) — 30-min cache, `startAfterWake()` skips preflight on wake, cache cleared on preflight failure and on verify exhaustion. See `CycleEngine.swift`.
+
 # Ticket 04 — Cache preflight and skip on wake
 
 **Severity:** Major

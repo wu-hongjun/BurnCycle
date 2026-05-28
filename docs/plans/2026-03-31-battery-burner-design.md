@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented (multiple commits, see git log) — original v1.0 design landed; app since renamed to BurnCycle and architecture has evolved substantially (preflight outlet test, sleep/wake handling, AppServices container, stress-test mode, menu bar mode, history chart, CoAP resilience). See `docs/audits/2026-05-27-remediation-report.md` for the current state.
+
 # Battery Burner - Design Document
 
 ## Overview

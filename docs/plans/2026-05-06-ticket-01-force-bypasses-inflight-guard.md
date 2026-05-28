@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `fad124f` (fix: make ChargingController resilient to CoAP flakiness) — serial `inflight` chain with `latestTaskId` bookkeeping; force calls enqueue rather than drop. See `ChargingController.swift`.
+
 # Ticket 01 — `force: true` must bypass the in-flight guard
 
 **Severity:** Critical (safety)

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Hardened-runtime entitlements for BurnCycle.
+
+      NOTE: The App Sandbox (com.apple.security.app-sandbox) is intentionally
+      NOT enabled. This app:
+        * spawns subprocesses (/usr/bin/shortcuts, the bundled xmrig binary)
+        * reads private IOKit / IOReport symbols for battery and GPU stats
+      A strict App Sandbox would block both of these and break core
+      functionality. We instead ship with the hardened runtime enabled
+      (codesign --options runtime) plus the minimum exceptions below.
+
+      Each entitlement below is required because:
+        - allow-jit / unsigned-executable-memory: xmrig uses JIT-style
+          code paths and RandomX VM execution; without these the hardened
+          runtime kills the child process.
+        - disable-library-validation: lets the app load/spawn the bundled
+          xmrig binary, which is ad-hoc signed (different / no Team ID).
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>

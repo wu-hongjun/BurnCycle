@@ -14,6 +14,7 @@ struct MainView: View {
     @State private var showSettings = false
     @State private var showInfo = false
     @State private var showHistory = false
+    @State private var showClearConfirm = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -22,10 +23,13 @@ struct MainView: View {
                 Label("\(battery.percentage)%", systemImage: batteryIcon)
                     .foregroundColor(batteryColor)
                     .fontWeight(.bold)
+                    .accessibilityLabel("Battery \(battery.percentage) percent, \(battery.isPluggedIn ? "plugged in" : "on battery")")
                 Spacer()
-                Label("\(battery.healthPercent)%", systemImage: "heart.fill")
-                    .foregroundColor(battery.healthPercent > 80 ? .green : battery.healthPercent > 50 ? .yellow : .red)
+                Label("\(battery.healthPercent)%", systemImage: healthIcon)
+                    .foregroundColor(healthColor)
+                    .accessibilityLabel("Battery health \(battery.healthPercent) percent, \(healthDescription)")
                 Label("\(battery.cycleCount)", systemImage: "arrow.triangle.2.circlepath")
+                    .accessibilityLabel("\(battery.cycleCount) hardware charge cycles")
             }
             .font(.caption)
 
@@ -34,8 +38,10 @@ struct MainView: View {
                 Label(stateLabel, systemImage: stateIcon)
                     .foregroundColor(stateColor)
                     .fontWeight(.semibold)
+                    .accessibilityLabel("State: \(stateLabel)")
                 if charging.isRunningShortcut {
                     ProgressView().scaleEffect(0.5).frame(width: 12, height: 12)
+                        .accessibilityLabel("Running shortcut")
                 }
                 Spacer()
                 Text("CPU \(String(format: "%.0f%%", system.cpuUsage))")
@@ -58,22 +64,25 @@ struct MainView: View {
                             .foregroundColor(.orange)
                     } else if engine.loadThrottled {
                         Label("Throttled (system busy)", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.orange)
                     }
                     Spacer()
                     if engine.cycleCount > 0 {
-                        Text("Cycles: \(engine.cycleCount)")
+                        Text("Session: \(engine.cycleCount)")
+                            .accessibilityLabel("\(engine.cycleCount) cycles completed this session")
                     }
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
             }
 
-            if let error = charging.lastError {
-                Text(error).font(.caption2).foregroundColor(.red)
-            }
+            // Prefer the engine's error (orange) as the single source of truth.
+            // Only fall back to charging.lastError (red) when the engine has none,
+            // to avoid showing duplicate / stale/contradictory error lines.
             if let err = engine.errorMessage {
                 Text(err).font(.caption2).foregroundColor(.orange)
+            } else if let error = charging.lastError {
+                Text(error).font(.caption2).foregroundColor(.red)
             }
             if let status = engine.statusMessage {
                 Text(status).font(.caption2).foregroundColor(.secondary)
@@ -104,11 +113,16 @@ struct MainView: View {
 
                 Spacer()
 
-                Button(engine.isRunning ? "Stop" : "Start") {
+                Button {
                     if engine.isRunning { engine.stop() } else { engine.start() }
+                } label: {
+                    Label(engine.isRunning ? "Stop" : "Start",
+                          systemImage: engine.isRunning ? "stop.fill" : "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(engine.isRunning ? .red : .green)
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityLabel(engine.isRunning ? "Stop cycling" : "Start cycling")
             }
 
             // Settings panel
@@ -166,11 +180,17 @@ struct MainView: View {
                                 }
                                 .font(.caption)
                             }
+
+                            if let stressErr = stress.lastError {
+                                Label(stressErr, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption).foregroundColor(.orange)
+                            }
                         }
 
                         if engine.loadThrottled {
-                            Text("Load paused — system busy (CPU/GPU > 80%)")
-                                .font(.caption).foregroundColor(.yellow)
+                            Label("Load paused — system busy (CPU/GPU > 80%)",
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundColor(.orange)
                         }
                     }
 
@@ -201,6 +221,11 @@ struct MainView: View {
                         }
                         TextField("Shortcut name", text: $settings.stopChargingShortcut)
                             .textFieldStyle(.roundedBorder)
+
+                        if engine.isRunning {
+                            Text("Shortcut name changes apply on the next charge/drain phase.")
+                                .font(.caption2).foregroundColor(.secondary)
+                        }
 
                         HStack {
                             Spacer()
@@ -245,9 +270,9 @@ struct MainView: View {
                     infoRow("Charge Cycles", "\(battery.cycleCount)")
                     infoRow("Temperature", String(format: "%.1f °C", battery.temperature))
                     infoRow("Voltage", String(format: "%.3f V", battery.voltage))
-                    infoRow("Serial", battery.serial)
+                    infoRow("Serial", battery.serial.isEmpty ? "—" : battery.serial)
                     if battery.isPluggedIn {
-                        infoRow("Power Adapter", battery.adapterName)
+                        infoRow("Power Adapter", battery.adapterName.isEmpty ? "—" : battery.adapterName)
                         infoRow("Battery Input", String(format: "%.1f W", battery.chargingWatts))
                     } else {
                         infoRow("Battery Output", String(format: "%.1f W", battery.chargingWatts))
@@ -334,18 +359,33 @@ struct MainView: View {
                                 .font(.caption2).foregroundColor(.secondary)
                             Spacer()
                             Button("Clear All") {
-                                history.clearAll()
+                                showClearConfirm = true
                             }
                             .buttonStyle(.bordered).controlSize(.mini)
                             .tint(.red)
+                            .confirmationDialog("Delete all history?",
+                                                isPresented: $showClearConfirm,
+                                                titleVisibility: .visible) {
+                                Button("Delete All Entries", role: .destructive) {
+                                    history.clearAll()
+                                }
+                                Button("Cancel", role: .cancel) { }
+                            } message: {
+                                Text("This permanently removes all recorded battery health history. This cannot be undone.")
+                            }
                         }
+                    }
+
+                    if let saveErr = history.lastError {
+                        Label(saveErr, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption2).foregroundColor(.orange)
                     }
                 }
                 .padding(.top, 4)
             }
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(minWidth: 320, idealWidth: 320, maxWidth: 420)
     }
 
     /// Auto-zoom Y axis around recorded health values for clearer trend visibility
@@ -388,6 +428,26 @@ struct MainView: View {
         if battery.percentage > 60 { return .green }
         if battery.percentage > 20 { return .yellow }
         return .red
+    }
+
+    // Health uses both color AND a distinct SF Symbol so the state is not conveyed
+    // by color alone (M2). orange instead of yellow for the mid tier (L6 contrast).
+    private var healthColor: Color {
+        if battery.healthPercent > 80 { return .green }
+        if battery.healthPercent > 50 { return .orange }
+        return .red
+    }
+
+    private var healthIcon: String {
+        if battery.healthPercent > 80 { return "heart.fill" }
+        if battery.healthPercent > 50 { return "heart" }
+        return "heart.slash.fill"
+    }
+
+    private var healthDescription: String {
+        if battery.healthPercent > 80 { return "good" }
+        if battery.healthPercent > 50 { return "fair" }
+        return "poor"
     }
 
     private var stateLabel: String {

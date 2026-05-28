@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `d6ac33f` (fix: cache preflight result and debounce settings observer) — settings observer now uses `.debounce(for: .seconds(0.5), scheduler: RunLoop.main)`. See `CycleEngine.swift`.
+
 # Ticket 05 — Debounce settings observer
 
 **Severity:** Minor

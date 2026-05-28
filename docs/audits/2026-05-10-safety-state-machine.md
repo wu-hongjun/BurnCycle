@@ -1,5 +1,7 @@
 # Safety state machine audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10
 **Auditor:** codex-reviewer (Claude Sonnet 4.6 + Codex gpt-5.5)
 **Scope:** Full read-only audit of the battery-cycle safety state machine.

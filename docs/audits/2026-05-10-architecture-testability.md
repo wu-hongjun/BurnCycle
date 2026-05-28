@@ -1,5 +1,7 @@
 # Architecture & testability audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10
 **Auditor:** codex-reviewer
 **Scope:** All 11 Swift source files — read-only analysis, no code changes.

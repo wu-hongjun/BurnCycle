@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented (multiple commits, see git log) — initial scaffold through PopoverView wiring all landed. Code has since been heavily refactored (rename to BurnCycle, AppServices container, expanded services, MainView replacing PopoverView, 2s/60s/1h tiered BatteryMonitor, etc.). See `docs/audits/2026-05-27-remediation-report.md` for the current state.
+
 # Battery Burner Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

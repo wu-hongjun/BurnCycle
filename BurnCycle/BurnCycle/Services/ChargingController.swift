@@ -21,11 +21,21 @@ private final class TimeoutFlag: @unchecked Sendable {
     }
 }
 
+/// Bridges the cycle engine to the user's Shortcuts.app workflows that physically
+/// toggle a smart outlet. Each `shortcuts run` invocation goes through a serial
+/// chain: a force call serializes behind any in-flight task (never dropped),
+/// while a non-force call short-circuits when a task is already running or when
+/// the per-action cooldown is still active. A watchdog SIGTERMs the subprocess
+/// after `shortcutTimeoutSeconds` so a hung shortcut can't wedge the engine.
 @MainActor
 final class ChargingController: ObservableObject {
     /// UI signal only — does NOT gate concurrent calls. Use `inflight` for
     /// queueing decisions. Cleared when the most-recent task completes.
     @Published var isRunningShortcut: Bool = false
+    /// Most recent shortcut failure (timeout, non-zero exit, launch error).
+    /// Cleared on the next successful invocation. The cycle engine prefers
+    /// its own `errorMessage` and clears this in `clearMessages()` so the UI
+    /// never shows two contradictory error lines.
     @Published var lastError: String?
 
     private var lastStartTime: Date = .distantPast
@@ -47,24 +57,48 @@ final class ChargingController: ObservableObject {
     /// that task clears the UI signal and `inflight` on completion.
     private var latestTaskId: UInt64 = 0
 
-    /// Start charging — safety-critical, bypasses cooldown AND in-flight guard
+    /// Run the configured "start" shortcut. When `force` is true the call
+    /// bypasses both the cooldown window and the in-flight guard and is
+    /// serialised onto the chain (never dropped) — used for safety-critical
+    /// charges (critical battery, preflight, post-verify retry).
     func startCharging(shortcutName: String, force: Bool = false) {
         runShortcut(name: shortcutName, action: "start", force: force)
     }
 
+    /// Run the configured "stop" shortcut. See `startCharging` for `force` semantics.
     func stopCharging(shortcutName: String, force: Bool = false) {
         runShortcut(name: shortcutName, action: "stop", force: force)
     }
 
+    /// Settings-panel "Test" button — always forces the start shortcut so the
+    /// user can verify outlet wiring regardless of cooldown state.
     func testStartCharging(shortcutName: String) {
         runShortcut(name: shortcutName, action: "start", force: true)
     }
 
+    /// Settings-panel "Test" button — always forces the stop shortcut.
     func testStopCharging(shortcutName: String) {
         runShortcut(name: shortcutName, action: "stop", force: true)
     }
 
     private func runShortcut(name: String, action: String, force: Bool) {
+        // M2 (error-handling): reject empty/whitespace-only names rather than
+        // spawning `shortcuts run ""`, which fails with a cryptic CLI error.
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastError = "Shortcut name is empty"
+            return
+        }
+
+        // M-4 (security): the name is passed as an argv element (not a shell
+        // string), so shell injection is not possible. Still reject control
+        // characters / newlines / null bytes defensively — they can pollute
+        // logs or truncate the argument inside `shortcuts`.
+        guard name.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            lastError = "Shortcut name contains invalid characters"
+            return
+        }
+
         let now = Date()
 
         // Non-force calls respect both the cooldown window AND the
@@ -91,6 +125,8 @@ final class ChargingController: ObservableObject {
         // Each task gets a unique id so on completion it can detect
         // whether it is still the most-recent task in the chain (and
         // therefore the one responsible for clearing UI state).
+        // m1 (concurrency): `&+=` wraps at UInt64.max, which is harmless in
+        // practice (it would take 2^64 invocations to wrap).
         latestTaskId &+= 1
         let myTaskId = latestTaskId
 
@@ -102,10 +138,17 @@ final class ChargingController: ObservableObject {
             // ----- Subprocess setup -----
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
-            process.arguments = ["run", name]
+            process.arguments = ["run", trimmedName]
 
             let errPipe = Pipe()
             process.standardError = errPipe
+
+            // H3 (memory): always close the read-end of the stderr pipe on
+            // every exit path (success, non-zero exit, timeout, throw) so the
+            // file descriptor is never leaked. ARC would eventually close it
+            // when `errPipe` is released, but an explicit defer is robust and
+            // covers the throw path too.
+            defer { try? errPipe.fileHandleForReading.close() }
 
             // ----- Watchdog: terminate the process if it hangs -----
             let didTimeout = TimeoutFlag()
@@ -121,6 +164,13 @@ final class ChargingController: ObservableObject {
                 // It does not capture `self`, only the local `process`
                 // and `didTimeout` flag, so it cannot keep the
                 // controller alive.
+                //
+                // M5/M1 (concurrency): the `isRunning`/`terminate()` pair is
+                // not atomic, but `Process.terminate()` is documented as safe
+                // to call even after the process has exited (it sends SIGTERM
+                // and ignores ESRCH). The TimeoutFlag is the authoritative
+                // signal for "we asked it to stop"; the worst case of the race
+                // is a no-op terminate on an already-exited process.
                 let watchdog = Task.detached {
                     try? await Task.sleep(nanoseconds: nanos)
                     if process.isRunning {
@@ -128,6 +178,12 @@ final class ChargingController: ObservableObject {
                         process.terminate()
                     }
                 }
+
+                // Drain stderr BEFORE reaping the process. Reading to EOF on a
+                // pipe blocks until the write-end closes (on process exit), so
+                // this both avoids a deadlock on large output and guarantees
+                // we have the data before `waitUntilExit()` returns.
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
 
                 process.waitUntilExit()
                 watchdog.cancel()
@@ -139,11 +195,15 @@ final class ChargingController: ObservableObject {
                     succeeded = true
                     errorOutput = nil
                 } else {
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                     let trimmed = String(data: errData, encoding: .utf8)?
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     succeeded = false
-                    errorOutput = (trimmed?.isEmpty == false) ? trimmed : nil
+                    // L-2 (security): sanitize raw tool stderr before it reaches
+                    // the UI — collapse to a single line and cap the length so
+                    // multi-line output (or leaked tokens) doesn't bloat the UI.
+                    errorOutput = (trimmed?.isEmpty == false)
+                        ? Self.sanitizeErrorMessage(trimmed!)
+                        : nil
                 }
             } catch {
                 succeeded = false
@@ -184,5 +244,20 @@ final class ChargingController: ObservableObject {
         }
 
         inflight = task
+    }
+
+    /// L-2 (security): collapse raw `shortcuts` stderr to a single, length-capped
+    /// line so multi-line tool output (or any leaked token-like strings) cannot
+    /// bloat the UI. Newlines/tabs become spaces; runs of whitespace collapse.
+    private nonisolated static func sanitizeErrorMessage(_ raw: String) -> String {
+        let maxLength = 200
+        let singleLine = raw
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        if singleLine.count > maxLength {
+            return String(singleLine.prefix(maxLength - 1)) + "…"
+        }
+        return singleLine
     }
 }

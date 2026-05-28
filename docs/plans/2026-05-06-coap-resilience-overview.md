@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented (multiple commits, see git log) — all 9 tickets landed. Tickets 01–03 in `fad124f` (ChargingController resilience), 04–05 in `d6ac33f` and follow-up `18b4aaa`, 06–08 in `c5fc84a`, 09 in `be58516`. The overview's scope was expanded beyond the original 5 tickets to include tickets 06–09 covering manual re-test, status/error split, throttle hysteresis, and system_profiler throttling.
+
 # CoAP Resilience — Overview
 
 **Date:** 2026-05-06

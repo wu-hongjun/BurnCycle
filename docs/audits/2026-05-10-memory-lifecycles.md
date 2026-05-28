@@ -1,5 +1,7 @@
 # Memory & resource lifecycle audit
 
+> **Remediation status (2026-05-27):** addressed on branch `fix/audit-remediation`. See [2026-05-27-remediation-report.md](2026-05-27-remediation-report.md) for the per-finding Fixed / Partial / Deferred status.
+
 **Date:** 2026-05-10  
 **Scope:** BurnCycle macOS menubar app — IOKit, subprocess, Combine, NSWorkspace observer, and Timer lifecycle correctness  
 **Auditor:** codex-reviewer (read-only pass)

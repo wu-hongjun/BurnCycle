@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `c5fc84a` (fix: re-test button, status/error split, throttle hysteresis) — `invalidatePreflightCache()` and `hasCachedPreflight` exposed on `CycleEngine`; button wired in `MainView.swift` (disabled while running or when no cache exists).
+
 # Ticket 06 — Manual "Re-test outlet" button
 
 **Severity:** Minor (escape hatch)
