@@ -10,6 +10,7 @@ struct MainView: View {
     @ObservedObject var system: SystemMonitor
     @ObservedObject var settings: AppSettings
     @ObservedObject var history: HistoryRecorder
+    @ObservedObject var brightness: BrightnessController
 
     @State private var showSettings = false
     @State private var showInfo = false
@@ -192,6 +193,24 @@ struct MainView: View {
                                   systemImage: "exclamationmark.triangle.fill")
                                 .font(.caption).foregroundColor(.orange)
                         }
+                    }
+
+                    // -- Charging Optimization --
+                    Text("Charging Optimization").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    if brightness.isAvailable {
+                        Toggle("Dim screen while charging", isOn: $settings.dimWhileCharging)
+                            .accessibilityHint("Reduces display brightness to charge slightly faster. Restored on drain.")
+                        if settings.dimWhileCharging {
+                            VStack(alignment: .leading) {
+                                Text("Dim to: \(Int(settings.dimBrightness * 100))%")
+                                Slider(value: $settings.dimBrightness, in: 0.0...0.5, step: 0.05)
+                            }
+                            Text("Saves your current brightness when charging begins; restores it when draining starts or when you stop the cycle.")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("Brightness control unavailable on this system.")
+                            .font(.caption).foregroundColor(.secondary)
                     }
 
                     // -- Outlet Control --

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dim screen while charging** (opt-in). New `BrightnessController` wraps
+  macOS's private `DisplayServicesGet/SetBrightness` (loaded via `dlopen`, same
+  "private but stable" trade-off as IOReport). When enabled, the engine saves
+  the user's current brightness on the charge transition, sets the display to
+  a configurable target (default 10 %), and restores the saved value on the
+  next drain — also on `stop()`, on app termination, and reactively when the
+  setting is toggled off mid-charge. Hidden when the framework is unavailable.
+  Two new settings: `dimWhileCharging` (default `false`), `dimBrightness`
+  (`0.0`–`0.5`, default `0.10`).
+
 ## [1.1.0] — 2026-05-27
 
 Remediation release. Ten parallel audits (dated 2026-05-10) covering safety,

@@ -30,6 +30,7 @@ final class CycleEngine: ObservableObject {
     private let stress: StressManager
     private let system: SystemMonitor
     private let settings: AppSettings
+    private let brightness: BrightnessController
 
     // nonisolated(unsafe): written only on the main actor; read once in `deinit`
     // (the sole nonisolated accessor), which runs when no other reference exists.
@@ -79,13 +80,15 @@ final class CycleEngine: ObservableObject {
     private var firedIdleEmergencyCharge = false
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
-         stress: StressManager, system: SystemMonitor, settings: AppSettings) {
+         stress: StressManager, system: SystemMonitor, settings: AppSettings,
+         brightness: BrightnessController) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
         self.stress = stress
         self.system = system
         self.settings = settings
+        self.brightness = brightness
 
         settingsObserver = settings.objectWillChange
             .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
@@ -362,6 +365,7 @@ final class CycleEngine: ObservableObject {
         wakeResumeTask?.cancel()
         wakeResumeTask = nil
         stopAllLoad()
+        brightness.restore()
         clearMessages()
         retryCount = 0
         verifyTicksRemaining = 0
@@ -370,6 +374,19 @@ final class CycleEngine: ObservableObject {
         firedIdleEmergencyCharge = false
         resetThrottleHysteresis()
         state = .idle
+    }
+
+    // MARK: - Brightness helpers
+
+    /// Save the user's current brightness and dim, but only while we're in a
+    /// charging state and the option is enabled (and the API is available).
+    /// Safe to call repeatedly during a charge phase — `BrightnessController`
+    /// remembers the pre-dim baseline on the first call and only re-applies
+    /// the target on subsequent ones.
+    private func applyDimIfEnabled() {
+        guard settings.dimWhileCharging, brightness.isAvailable else { return }
+        let target = Float(max(0.0, min(1.0, settings.dimBrightness)))
+        brightness.saveAndDim(to: target)
     }
 
     // MARK: - Reactive
@@ -425,6 +442,7 @@ final class CycleEngine: ObservableObject {
             state = .charging
             chargingStartedAt = Date()
             chargingStallWarned = false
+            applyDimIfEnabled()
             verifyTicksRemaining = 2
             return
         }
@@ -458,6 +476,18 @@ final class CycleEngine: ObservableObject {
             cycleCount += 1
             transitionToCharging()
             return
+        }
+
+        // Dim-while-charging settings react live during a charge phase:
+        // - Toggle on while charging → save & dim now.
+        // - Toggle off while charging → restore immediately.
+        // - Slider moved while charging and currently dimmed → re-apply target.
+        if state == .charging {
+            if settings.dimWhileCharging {
+                applyDimIfEnabled()
+            } else if brightness.isDimming {
+                brightness.restore()
+            }
         }
 
         guard state == .draining else { return }
@@ -655,6 +685,7 @@ final class CycleEngine: ObservableObject {
         chargingStallWarned = false
         stopAllLoad()
         charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        applyDimIfEnabled()
         verifyTicksRemaining = 2 // verify in ~20s
         resetThrottleHysteresis()
         // A drain just finished — meaningful moment to refresh battery health.
@@ -671,6 +702,7 @@ final class CycleEngine: ObservableObject {
         state = .draining
         chargingStartedAt = nil
         chargingStallWarned = false
+        brightness.restore()
         charging.stopCharging(shortcutName: settings.stopChargingShortcut, force: true)
         if settings.loadEnabled {
             if isExternalLoadSafe() {
