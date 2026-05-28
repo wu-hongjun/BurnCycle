@@ -7,6 +7,9 @@ import Metal
 final class StressManager: ObservableObject {
     @Published var isRunning: Bool = false
     @Published var status: String = "Idle"
+    /// Set when Metal setup fails so the UI can distinguish "CPU+GPU" from a
+    /// silent CPU-only fallback. Nil when GPU stress is available.
+    @Published var lastError: String?
 
     private var cpuTasks: [Task<Void, Never>] = []
     private var gpuTask: Task<Void, Never>?
@@ -16,13 +19,21 @@ final class StressManager: ObservableObject {
     private var commandQueue: MTLCommandQueue?
     private var pipelineState: MTLComputePipelineState?
 
+    /// True only when the full Metal GPU pipeline is ready to dispatch.
+    private var gpuAvailable: Bool {
+        device != nil && commandQueue != nil && pipelineState != nil
+    }
+
     init() {
         setupMetal()
     }
 
     private func setupMetal() {
         guard let device = MTLCreateSystemDefaultDevice(),
-              let queue = device.makeCommandQueue() else { return }
+              let queue = device.makeCommandQueue() else {
+            lastError = "GPU unavailable — no Metal device. Stress will use CPU only."
+            return
+        }
         self.device = device
         self.commandQueue = queue
 
@@ -41,16 +52,22 @@ final class StressManager: ObservableObject {
         """
         do {
             let library = try device.makeLibrary(source: kernel, options: nil)
-            if let function = library.makeFunction(name: "stress") {
-                pipelineState = try device.makeComputePipelineState(function: function)
+            guard let function = library.makeFunction(name: "stress") else {
+                lastError = "GPU unavailable — stress kernel not found. Stress will use CPU only."
+                return
             }
-        } catch { }
+            pipelineState = try device.makeComputePipelineState(function: function)
+        } catch {
+            lastError = "GPU unavailable — \(error.localizedDescription). Stress will use CPU only."
+        }
     }
 
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        status = "Stressing CPU+GPU"
+        // Be honest about what is actually running: GPU stress only happens when
+        // the full Metal pipeline is available.
+        status = gpuAvailable ? "Stressing CPU+GPU" : "Stressing CPU only (GPU unavailable)"
 
         // CPU stress — one task per core doing heavy math
         let coreCount = ProcessInfo.processInfo.processorCount

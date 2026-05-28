@@ -46,6 +46,40 @@ cp -r BurnCycle.app /Applications/
 open /Applications/BurnCycle.app
 ```
 
+### Signing & Gatekeeper
+
+`build.sh` applies an **ad-hoc signature** by default, which is fine for an app
+you build and run on your own Mac. It does **not** enable the App Sandbox: the
+app spawns subprocesses (Shortcuts, the bundled `xmrig`) and reads private
+IOKit/IOReport symbols for battery and GPU stats, all of which a strict sandbox
+would block. It is instead signed with the **hardened runtime** plus the minimal
+entitlements in `BurnCycle/BurnCycle/BurnCycle.entitlements`.
+
+If you **download a prebuilt `BurnCycle.zip`** (rather than building it
+yourself), macOS attaches the `com.apple.quarantine` attribute. Because the app
+is not signed with a paid Developer ID and notarized, Gatekeeper will block it
+with *"BurnCycle is damaged and can't be opened."* Remove the quarantine flag
+recursively (this also clears it from the bundled `xmrig` binary):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/BurnCycle.app
+```
+
+To distribute to others without this step, build with a Developer ID and
+notarize:
+
+```bash
+# Sign with your Developer ID (enables the hardened runtime + entitlements)
+BURNCYCLE_SIGN_ID="Developer ID Application: Your Name (TEAMID)" ./build.sh
+
+# Sign AND notarize (requires a stored notarytool keychain profile)
+BURNCYCLE_SIGN_ID="Developer ID Application: Your Name (TEAMID)" \
+BURNCYCLE_NOTARY_PROFILE="BurnCycleNotary" ./build.sh
+```
+
+See the comments in `build.sh` for the one-time `notarytool store-credentials`
+setup.
+
 ## Usage
 
 1. Launch the app
@@ -88,6 +122,28 @@ BurnCycle/
 | Method | Stress Test | Stress Test or Mine XMR |
 | Wallet | (built-in) | Custom XMR wallet (empty = developer's wallet, supports development) |
 | Start/Stop Shortcuts | "Start Charging" / "Stop Charging" | HomeKit shortcut names |
+
+## Privacy & Mining
+
+BurnCycle is a local app and does not phone home. However, the **Mine XMR** load
+method has privacy implications you should understand:
+
+- **Mining is opt-in.** It only runs when you enable the **Generate load** toggle
+  *and* select the **Mine XMR** method. With the default **Stress Test** method,
+  nothing leaves your device. Mining is off unless you turn it on.
+- **What leaves your device when mining:** your configured XMR wallet address and
+  your hashrate are sent to the mining pool (`nanopool.org`) over TLS. No other
+  personal data is transmitted.
+- **The default wallet is the developer's.** If you leave the **Wallet** field
+  empty, mining proceeds to the developer's Monero donation wallet to support
+  development. This means that with the default settings, enabling XMR mining
+  mines **to the developer**, not to you.
+- **How to mine to your own wallet:** open **Settings** and enter your own XMR
+  wallet address in the **Wallet** field. Your hashrate will then credit your
+  wallet instead.
+- **How to opt out entirely:** leave **Generate load** off, or use the **Stress
+  Test** method, which performs the same battery-draining work with zero network
+  activity.
 
 ## License
 

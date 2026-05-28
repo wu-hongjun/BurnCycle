@@ -19,6 +19,13 @@ struct HistoryEntry: Codable, Identifiable {
 @MainActor
 final class HistoryRecorder: ObservableObject {
     @Published var entries: [HistoryEntry] = []
+    /// Set when an encode/write fails so the UI can warn that history isn't being
+    /// persisted. Cleared on a successful save.
+    @Published var lastError: String?
+
+    /// Cap on stored entries — this app cycles continuously so without a bound the
+    /// array (and on-disk file) would grow forever. Keep the most recent N.
+    private let maxEntries = 1000
 
     private let fileURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -48,6 +55,9 @@ final class HistoryRecorder: ObservableObject {
                                      fullChargeCapacityMAh: fullChargeCapacityMAh,
                                      healthPercent: healthPercent)
             entries.append(entry)
+            if entries.count > maxEntries {
+                entries.removeFirst(entries.count - maxEntries)
+            }
             save()
         }
 
@@ -75,8 +85,12 @@ final class HistoryRecorder: ObservableObject {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted]
-        if let data = try? encoder.encode(entries) {
-            try? data.write(to: fileURL)
+        do {
+            let data = try encoder.encode(entries)
+            try data.write(to: fileURL)
+            lastError = nil
+        } catch {
+            lastError = "Couldn't save history: \(error.localizedDescription)"
         }
     }
 }

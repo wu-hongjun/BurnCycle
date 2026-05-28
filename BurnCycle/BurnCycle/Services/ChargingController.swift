@@ -65,6 +65,23 @@ final class ChargingController: ObservableObject {
     }
 
     private func runShortcut(name: String, action: String, force: Bool) {
+        // M2 (error-handling): reject empty/whitespace-only names rather than
+        // spawning `shortcuts run ""`, which fails with a cryptic CLI error.
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastError = "Shortcut name is empty"
+            return
+        }
+
+        // M-4 (security): the name is passed as an argv element (not a shell
+        // string), so shell injection is not possible. Still reject control
+        // characters / newlines / null bytes defensively — they can pollute
+        // logs or truncate the argument inside `shortcuts`.
+        guard name.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            lastError = "Shortcut name contains invalid characters"
+            return
+        }
+
         let now = Date()
 
         // Non-force calls respect both the cooldown window AND the
@@ -91,6 +108,8 @@ final class ChargingController: ObservableObject {
         // Each task gets a unique id so on completion it can detect
         // whether it is still the most-recent task in the chain (and
         // therefore the one responsible for clearing UI state).
+        // m1 (concurrency): `&+=` wraps at UInt64.max, which is harmless in
+        // practice (it would take 2^64 invocations to wrap).
         latestTaskId &+= 1
         let myTaskId = latestTaskId
 
@@ -102,10 +121,17 @@ final class ChargingController: ObservableObject {
             // ----- Subprocess setup -----
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
-            process.arguments = ["run", name]
+            process.arguments = ["run", trimmedName]
 
             let errPipe = Pipe()
             process.standardError = errPipe
+
+            // H3 (memory): always close the read-end of the stderr pipe on
+            // every exit path (success, non-zero exit, timeout, throw) so the
+            // file descriptor is never leaked. ARC would eventually close it
+            // when `errPipe` is released, but an explicit defer is robust and
+            // covers the throw path too.
+            defer { try? errPipe.fileHandleForReading.close() }
 
             // ----- Watchdog: terminate the process if it hangs -----
             let didTimeout = TimeoutFlag()
@@ -121,6 +147,13 @@ final class ChargingController: ObservableObject {
                 // It does not capture `self`, only the local `process`
                 // and `didTimeout` flag, so it cannot keep the
                 // controller alive.
+                //
+                // M5/M1 (concurrency): the `isRunning`/`terminate()` pair is
+                // not atomic, but `Process.terminate()` is documented as safe
+                // to call even after the process has exited (it sends SIGTERM
+                // and ignores ESRCH). The TimeoutFlag is the authoritative
+                // signal for "we asked it to stop"; the worst case of the race
+                // is a no-op terminate on an already-exited process.
                 let watchdog = Task.detached {
                     try? await Task.sleep(nanoseconds: nanos)
                     if process.isRunning {
@@ -128,6 +161,12 @@ final class ChargingController: ObservableObject {
                         process.terminate()
                     }
                 }
+
+                // Drain stderr BEFORE reaping the process. Reading to EOF on a
+                // pipe blocks until the write-end closes (on process exit), so
+                // this both avoids a deadlock on large output and guarantees
+                // we have the data before `waitUntilExit()` returns.
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
 
                 process.waitUntilExit()
                 watchdog.cancel()
@@ -139,11 +178,15 @@ final class ChargingController: ObservableObject {
                     succeeded = true
                     errorOutput = nil
                 } else {
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                     let trimmed = String(data: errData, encoding: .utf8)?
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     succeeded = false
-                    errorOutput = (trimmed?.isEmpty == false) ? trimmed : nil
+                    // L-2 (security): sanitize raw tool stderr before it reaches
+                    // the UI — collapse to a single line and cap the length so
+                    // multi-line output (or leaked tokens) doesn't bloat the UI.
+                    errorOutput = (trimmed?.isEmpty == false)
+                        ? Self.sanitizeErrorMessage(trimmed!)
+                        : nil
                 }
             } catch {
                 succeeded = false
@@ -184,5 +227,20 @@ final class ChargingController: ObservableObject {
         }
 
         inflight = task
+    }
+
+    /// L-2 (security): collapse raw `shortcuts` stderr to a single, length-capped
+    /// line so multi-line tool output (or any leaked token-like strings) cannot
+    /// bloat the UI. Newlines/tabs become spaces; runs of whitespace collapse.
+    private nonisolated static func sanitizeErrorMessage(_ raw: String) -> String {
+        let maxLength = 200
+        let singleLine = raw
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        if singleLine.count > maxLength {
+            return String(singleLine.prefix(maxLength - 1)) + "…"
+        }
+        return singleLine
     }
 }

@@ -31,9 +31,12 @@ final class AppServices: ObservableObject {
         battery.startMonitoring()
         system.startMonitoring()
 
-        // Record history snapshots when battery slow values change
-        historyObserver = battery.$cycleCount
-            .combineLatest(battery.$healthPercent, battery.$fullChargeCapacityMAh)
+        // Record history snapshots when battery slow values change.
+        // removeDuplicates() on each upstream avoids re-firing on every 60s slow-tick
+        // when the values are identical (F-03).
+        historyObserver = battery.$cycleCount.removeDuplicates()
+            .combineLatest(battery.$healthPercent.removeDuplicates(),
+                           battery.$fullChargeCapacityMAh.removeDuplicates())
             .sink { [weak self] cycle, health, capacity in
                 Task { @MainActor in
                     self?.history.observe(cycleCount: cycle,
@@ -48,6 +51,13 @@ final class AppServices: ObservableObject {
 struct BurnCycleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var services = AppServices()
+
+    // Mirror of AppSettings.showInMenuBar backed by the same UserDefaults key. The
+    // App body must observe this directly so toggling "Show in menu bar" in the
+    // settings panel re-evaluates the scene and inserts/removes the MenuBarExtra
+    // live (M5). AppServices does not forward settings.objectWillChange, so reading
+    // services.settings here would not be reactive at the App level.
+    @AppStorage("showInMenuBar") private var showInMenuBar: Bool = false
 
     var body: some Scene {
         Window("BurnCycle", id: "main") {
@@ -64,11 +74,9 @@ struct BurnCycleApp: App {
         }
         .windowResizability(.contentSize)
 
-        // Menu bar status item with summary popover (visibility bound to settings)
-        MenuBarExtra(isInserted: Binding(
-            get: { services.settings.showInMenuBar },
-            set: { services.settings.showInMenuBar = $0 }
-        )) {
+        // Menu bar status item with summary popover. Visibility is driven by the
+        // App-level @AppStorage mirror so it reacts to settings changes live (M5).
+        MenuBarExtra(isInserted: $showInMenuBar) {
             MenuBarPopover(battery: services.battery, engine: services.engine,
                            mining: services.mining, stress: services.stress,
                            settings: services.settings)
@@ -88,6 +96,20 @@ struct MenuBarLabel: View {
         HStack(spacing: 4) {
             Image(systemName: iconName)
             Text("\(battery.percentage)%")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("BurnCycle: battery \(battery.percentage) percent, \(stateDescription)")
+    }
+
+    private var stateDescription: String {
+        guard engine.isRunning else {
+            return battery.isPluggedIn ? "plugged in, idle" : "on battery, idle"
+        }
+        switch engine.state {
+        case .charging: return "charging"
+        case .draining: return "draining"
+        case .testing: return "testing outlet"
+        case .idle: return "idle"
         }
     }
 
@@ -118,7 +140,8 @@ struct MenuBarPopover: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("\(battery.percentage)%")
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .font(.largeTitle.weight(.semibold))
+                    .fontDesign(.rounded)
                 Spacer()
                 Text(engine.state.rawValue)
                     .font(.caption).fontWeight(.semibold)
@@ -158,11 +181,23 @@ struct MenuBarPopover: View {
                 .font(.caption)
             }
 
+            // Surface engine errors here too — a user running with the main window
+            // closed would otherwise see no indication of a failure (L4/L7).
+            if let err = engine.errorMessage {
+                Text(err)
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Divider()
 
             HStack(spacing: 8) {
-                Button(engine.isRunning ? "Stop" : "Start") {
+                Button {
                     if engine.isRunning { engine.stop() } else { engine.start() }
+                } label: {
+                    Label(engine.isRunning ? "Stop" : "Start",
+                          systemImage: engine.isRunning ? "stop.fill" : "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)

@@ -41,7 +41,8 @@ final class SystemMonitor: ObservableObject {
     @Published var gpuUsage: Double = 0
     @Published var powerWatts: Double = 0
 
-    private var timer: Timer?
+    // nonisolated(unsafe): written only on the main actor; read once in `deinit`.
+    private nonisolated(unsafe) var timer: Timer?
     private var previousCPUInfo: host_cpu_load_info?
     private let hostPort = mach_host_self()
 
@@ -53,6 +54,14 @@ final class SystemMonitor: ObservableObject {
     init() {
         previousCPUInfo = readCPUTicks()
         setupGPUReport()
+    }
+
+    deinit {
+        // M1: mach_host_self() adds a send right; release it to avoid leaking a
+        // Mach port for the app lifetime. Also invalidate the timer defensively
+        // for any future non-singleton lifecycle (previews/tests).
+        timer?.invalidate()
+        mach_port_deallocate(mach_task_self_, hostPort)
     }
 
     func startMonitoring() {
@@ -224,23 +233,28 @@ final class SystemMonitor: ObservableObject {
         guard service != IO_OBJECT_NULL else { return }
         defer { IOObjectRelease(service) }
 
-        var props: Unmanaged<CFMutableDictionary>?
-        guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
-              let dict = props?.takeRetainedValue() as? [String: Any] else {
+        // F-02: read only Voltage and Amperage via targeted IORegistry reads
+        // instead of copying the entire AppleSmartBattery dictionary every 3s.
+        guard let voltage = property(service, "Voltage") as? Int else { return }
+
+        let amperage: Int64
+        if let raw = property(service, "Amperage") as? Int64 {
+            amperage = raw
+        } else if let raw = property(service, "Amperage") as? Int {
+            amperage = Int64(bitPattern: UInt64(bitPattern: Int64(raw)))
+        } else {
             return
         }
+        let watts = abs(Double(amperage) * Double(voltage)) / 1_000_000
+        powerWatts = (watts * 10).rounded() / 10
+    }
 
-        if let voltage = dict["Voltage"] as? Int {
-            let amperage: Int64
-            if let raw = dict["Amperage"] as? Int64 {
-                amperage = raw
-            } else if let raw = dict["Amperage"] as? Int {
-                amperage = Int64(bitPattern: UInt64(bitPattern: Int64(raw)))
-            } else {
-                return
-            }
-            let watts = abs(Double(amperage) * Double(voltage)) / 1_000_000
-            powerWatts = (watts * 10).rounded() / 10
+    /// Targeted single-key IORegistry read (F-02): copies only the requested
+    /// property rather than the full AppleSmartBattery dictionary.
+    private func property(_ service: io_service_t, _ key: String) -> Any? {
+        guard let value = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0) else {
+            return nil
         }
+        return value.takeRetainedValue()
     }
 }
