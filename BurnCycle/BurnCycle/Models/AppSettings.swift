@@ -21,13 +21,6 @@ final class AppSettings: ObservableObject {
     @AppStorage("pauseOnSleep") var pauseOnSleep: Bool = true
     @AppStorage("showInMenuBar") var showInMenuBar: Bool = false
 
-    /// Dim the display while the cycle is charging, then restore the prior
-    /// brightness when it switches to draining. Opt-in (off by default) and
-    /// only honored when `BrightnessController.isAvailable`.
-    @AppStorage("dimWhileCharging") var dimWhileCharging: Bool = false
-    /// Brightness applied while dimming (0.0–1.0). Default 10%.
-    @AppStorage("dimBrightness") var dimBrightness: Double = 0.10
-
     /// Typed accessor over the raw `loadMethod` string. Falls back to `.stress`
     /// if the stored value can't be parsed (e.g. a stale key from a prior build).
     var selectedLoadMethod: LoadMethod {

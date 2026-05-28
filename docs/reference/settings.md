@@ -103,27 +103,6 @@ while asleep (M-2).
 | Show in menu bar | `showInMenuBar` | `false` | Reactive — toggling inserts/removes `MenuBarExtra` live |
 | Pause cycling when Mac sleeps | `pauseOnSleep` | `true` | Stop on sleep; auto-resume ~2 s after wake if we were cycling |
 
-## Charging Optimization
-
-| Setting | UserDefaults key | Default | Description |
-|---------|------------------|---------|-------------|
-| Dim screen while charging | `dimWhileCharging` | `false` | Save current brightness on the charge transition, dim to `dimBrightness`, restore on drain |
-| Dim level | `dimBrightness` | `0.10` (10 %) | Target brightness while dimming, `0.0`–`0.5` slider, step 5 % |
-
-`BrightnessController` loads `/System/Library/PrivateFrameworks/DisplayServices.framework`
-via `dlopen` and resolves `DisplayServicesGetBrightness` /
-`DisplayServicesSetBrightness`. When either symbol can't be resolved the UI
-hides the section and the engine no-ops the dim path. The pre-dim brightness
-is only captured on the *first* dim call of a charge phase — subsequent slider
-changes re-target without overwriting the baseline. Restore fires on:
-
-- the `.charging` → `.draining` transition,
-- `stop()`,
-- toggling `dimWhileCharging` off mid-charge (via the debounced settings
-  observer in `CycleEngine`),
-- `NSApplication.willTerminateNotification` (so ⌘Q during a charge phase
-  doesn't pin the screen dim).
-
 `showInMenuBar` is mirrored at the `App` level via `@AppStorage("showInMenuBar")`
 so SwiftUI re-evaluates the scene when it changes — observing
 `services.settings` from the App body would not be reactive because

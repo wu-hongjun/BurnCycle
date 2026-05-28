@@ -54,7 +54,7 @@ The main window shows:
 
 Three panels:
 
-- **Settings** — thresholds, load method, wallet, shortcuts, *Re-test outlet on next Start*, menu-bar toggle, *Dim screen while charging* (opt-in; restores brightness on drain)
+- **Settings** — thresholds, load method, wallet, shortcuts, *Re-test outlet on next Start*, menu-bar toggle
 - **Info** — detailed battery data (capacity, temperature, voltage, serial)
 - **History** — recorded snapshots over time
 
