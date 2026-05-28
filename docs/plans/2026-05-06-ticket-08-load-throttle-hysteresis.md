@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `c5fc84a` (fix: re-test button, status/error split, throttle hysteresis) — `consecutiveHighLoadTicks` / `consecutiveLowLoadTicks` with 3-tick stop / 6-tick resume thresholds and a `resetThrottleHysteresis()` helper called from stop/transition paths. See `CycleEngine.swift`.
+
 # Ticket 08 — Add hysteresis to load throttling
 
 **Severity:** Minor (UX during draining, no safety impact)

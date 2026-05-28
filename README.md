@@ -2,6 +2,8 @@
 
 A macOS app that automatically cycles your MacBook battery between configurable thresholds using a HomeKit smart outlet.
 
+Full docs: [burncycle.hongjunwu.com](https://burncycle.hongjunwu.com/) (source under [`docs/`](docs/index.md)).
+
 <img width="597" height="417" alt="image" src="https://github.com/user-attachments/assets/39ae44d2-a1c9-4b4f-b886-68bf4a08c78e" />
 
 ## How It Works
@@ -21,14 +23,21 @@ Load is smart — it auto-throttles when system is already under heavy load (>80
 
 - **Automatic battery cycling** via HomeKit smart outlet (Apple Shortcuts)
 - **Two load methods**: built-in offline stress test, or XMR mining
-- **Preflight outlet test** on every Start — verifies shortcut actually controls the only AC source (catches Thunderbolt docks, broken shortcuts, missing cable)
-- **Smart load detection** — auto-throttles when other apps are heavy
-- **Multi-layer safety** — emergency charge at 3%, safety margin stops load 3% above threshold, reactive battery observer
+- **Preflight outlet test** — verifies the shortcut actually controls the only AC source (catches Thunderbolt docks, broken shortcuts, missing cable). Cached for 30 min after a successful run; a *Re-test outlet on next Start* button forces a fresh check.
+- **Smart load detection** — auto-throttles when other apps are heavy (>80% CPU/GPU), with hysteresis to avoid flapping
+- **Multi-layer safety**
+    - Emergency charge at 3% — fires regardless of cycle state while running, with a one-shot idle safeguard even when stopped
+    - Retry-forever cadence (~60s) on shortcut failure, naming a second power source / Thunderbolt dock if detected
+    - Safety margin stops load 3% above the lower threshold
+    - Charging-stall watchdog warns (non-fatal) after 90 min stuck below the upper threshold (macOS Optimized Battery Charging may cap at 80%)
+    - Refuses to start on a desktop Mac with no internal battery
+    - Threshold sliders are clamped so upper > lower with a 5% gap
 - **Detailed battery info** — capacity (mAh), Real vs Apple-reported health, serial, voltage, temperature, charger wattage
 - **History tab** — persistent log of cycle count, capacity, and health over time
 - **Real-time monitoring** — battery %, CPU %, GPU % (via IOReport, matches mactop), power draw
+- **Menu-bar mode** — optional `MenuBarExtra` with battery %, state, and Start/Stop, toggled live from Settings
 - **Liquid Glass icon** — refined for macOS 26 aesthetic
-- **Zero config** — wallet, pool, and xmrig binary all bundled
+- **Zero config** — wallet, pool, and xmrig binary all bundled (xmrig is SHA-256-verified at every launch)
 
 ## Prerequisites
 
@@ -86,29 +95,34 @@ setup.
 2. Click **Settings** and verify your shortcut names match (default: "Start Charging" / "Stop Charging")
 3. Use the **Test** buttons to verify your shortcuts toggle the outlet
 4. Choose load method (default: Stress Test) and toggle on if desired
-5. Click **Start** — the app runs a preflight test and begins cycling
+5. Click **Start** (or press ⌘↩) — the app runs a preflight test and begins cycling
 
-Click **Info** for detailed battery data, or **History** to view recorded snapshots over time.
+Click **Info** for detailed battery data, or **History** to view recorded snapshots over time. Enable **Show in menu bar** in Settings to add a `MenuBarExtra` with battery %, state, and an inline Start/Stop button — useful when the main window is closed.
+
+After a successful preflight the result is cached for 30 minutes so subsequent Start presses skip the outlet test. Use the **Re-test outlet on next Start** button (Settings ▸ Outlet Control) to invalidate that cache — for example after swapping hubs or moving the plug.
 
 ## Architecture
 
 ```
 BurnCycle/
-├── BurnCycleApp.swift              # App entry point, wires services
+├── BurnCycleApp.swift              # App entry point, wires services, MenuBarExtra
+├── BurnCycle.entitlements          # Hardened-runtime entitlements (sandbox off, documented)
+├── Info.plist                      # Bundle metadata: category, copyright, version
 ├── Models/
-│   └── AppSettings.swift           # UserDefaults persistence, LoadMethod enum
+│   └── AppSettings.swift           # UserDefaults persistence, LoadMethod enum, threshold clamp
 ├── Services/
 │   ├── BatteryMonitor.swift        # IOKit battery %, cycles, health, charger, etc.
 │   ├── ChargingController.swift    # Apple Shortcuts for HomeKit outlet
 │   ├── CycleEngine.swift           # State machine + load management + safety + preflight
 │   ├── HistoryRecorder.swift       # Persistent JSON history of cycle/capacity/health
-│   ├── MiningManager.swift         # xmrig process (bundled binary)
+│   ├── MiningManager.swift         # xmrig process (bundled binary, SHA-256-verified at launch)
 │   ├── StressManager.swift         # Built-in CPU+GPU stress test
 │   └── SystemMonitor.swift         # CPU %, GPU % (IOReport), power draw
 ├── Views/
 │   └── MainView.swift              # Single-view UI with Settings/Info/History panels
 ├── Resources/
-│   └── xmrig                       # Bundled xmrig arm64 binary
+│   ├── xmrig                       # Bundled xmrig arm64 binary
+│   └── xmrig.sha256                # Post-sign hash, sealed by the outer app signature
 └── Assets.xcassets/                # Liquid Glass app icon
 ```
 
@@ -116,12 +130,14 @@ BurnCycle/
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Charge to | 90% | Upper threshold — stop charging |
-| Drain to | 5% | Lower threshold — start charging |
+| Charge to | 90% | Upper threshold — stop charging. Clamped to at least lower + 5%. |
+| Drain to | 5% | Lower threshold — start charging. Clamped to at most upper − 5%. |
 | Generate load | ON | Enable load during drain phase |
 | Method | Stress Test | Stress Test or Mine XMR |
-| Wallet | (built-in) | Custom XMR wallet (empty = developer's wallet, supports development) |
+| Wallet | (built-in) | Custom XMR wallet (empty = developer's donation wallet — see Privacy below) |
 | Start/Stop Shortcuts | "Start Charging" / "Stop Charging" | HomeKit shortcut names |
+| Show in menu bar | OFF | Adds a `MenuBarExtra` with battery %, state, and Start/Stop |
+| Pause cycling when Mac sleeps | ON | Stops the cycle on sleep, resumes on wake (preflight is skipped on auto-resume) |
 
 ## Privacy & Mining
 
@@ -137,7 +153,13 @@ method has privacy implications you should understand:
 - **The default wallet is the developer's.** If you leave the **Wallet** field
   empty, mining proceeds to the developer's Monero donation wallet to support
   development. This means that with the default settings, enabling XMR mining
-  mines **to the developer**, not to you.
+  mines **to the developer**, not to you. The app surfaces this explicitly in
+  the status line ("Mining (default donation wallet)") so it is never silent.
+- **xmrig is hash-verified at every launch.** Before exec, the app computes a
+  SHA-256 of the bundled `Resources/xmrig` binary and compares it against the
+  sealed `Resources/xmrig.sha256` recorded at build time. If the binary has been
+  swapped or tampered with, mining fails closed with "xmrig integrity check
+  failed" and the process is never spawned.
 - **How to mine to your own wallet:** open **Settings** and enter your own XMR
   wallet address in the **Wallet** field. Your hashrate will then credit your
   wallet instead.

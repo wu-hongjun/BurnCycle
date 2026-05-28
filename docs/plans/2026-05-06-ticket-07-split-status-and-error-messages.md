@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `c5fc84a` (fix: re-test button, status/error split, throttle hysteresis) — `mismatchWarning` replaced with `statusMessage` / `errorMessage` and the `setStatus` / `setError` / `clearMessages` helpers. See `CycleEngine.swift`.
+
 # Ticket 07 — Split `mismatchWarning` into status vs error
 
 **Severity:** Minor (UX clarity)

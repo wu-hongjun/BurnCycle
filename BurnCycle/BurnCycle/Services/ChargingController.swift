@@ -21,11 +21,21 @@ private final class TimeoutFlag: @unchecked Sendable {
     }
 }
 
+/// Bridges the cycle engine to the user's Shortcuts.app workflows that physically
+/// toggle a smart outlet. Each `shortcuts run` invocation goes through a serial
+/// chain: a force call serializes behind any in-flight task (never dropped),
+/// while a non-force call short-circuits when a task is already running or when
+/// the per-action cooldown is still active. A watchdog SIGTERMs the subprocess
+/// after `shortcutTimeoutSeconds` so a hung shortcut can't wedge the engine.
 @MainActor
 final class ChargingController: ObservableObject {
     /// UI signal only — does NOT gate concurrent calls. Use `inflight` for
     /// queueing decisions. Cleared when the most-recent task completes.
     @Published var isRunningShortcut: Bool = false
+    /// Most recent shortcut failure (timeout, non-zero exit, launch error).
+    /// Cleared on the next successful invocation. The cycle engine prefers
+    /// its own `errorMessage` and clears this in `clearMessages()` so the UI
+    /// never shows two contradictory error lines.
     @Published var lastError: String?
 
     private var lastStartTime: Date = .distantPast
@@ -47,19 +57,26 @@ final class ChargingController: ObservableObject {
     /// that task clears the UI signal and `inflight` on completion.
     private var latestTaskId: UInt64 = 0
 
-    /// Start charging — safety-critical, bypasses cooldown AND in-flight guard
+    /// Run the configured "start" shortcut. When `force` is true the call
+    /// bypasses both the cooldown window and the in-flight guard and is
+    /// serialised onto the chain (never dropped) — used for safety-critical
+    /// charges (critical battery, preflight, post-verify retry).
     func startCharging(shortcutName: String, force: Bool = false) {
         runShortcut(name: shortcutName, action: "start", force: force)
     }
 
+    /// Run the configured "stop" shortcut. See `startCharging` for `force` semantics.
     func stopCharging(shortcutName: String, force: Bool = false) {
         runShortcut(name: shortcutName, action: "stop", force: force)
     }
 
+    /// Settings-panel "Test" button — always forces the start shortcut so the
+    /// user can verify outlet wiring regardless of cooldown state.
     func testStartCharging(shortcutName: String) {
         runShortcut(name: shortcutName, action: "start", force: true)
     }
 
+    /// Settings-panel "Test" button — always forces the stop shortcut.
     func testStopCharging(shortcutName: String) {
         runShortcut(name: shortcutName, action: "stop", force: true)
     }

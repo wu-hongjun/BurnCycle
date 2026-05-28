@@ -41,6 +41,31 @@ nav:
       - Settings: reference/settings.md
   - Development:
       - Contributing: development/contributing.md
+  - Audits:
+      - Remediation report (2026-05-27): audits/2026-05-27-remediation-report.md
+      - Architecture & testability (2026-05-10): audits/2026-05-10-architecture-testability.md
+      - Build & distribution (2026-05-10): audits/2026-05-10-build-distribution.md
+      - Code quality (2026-05-10): audits/2026-05-10-code-quality.md
+      - Concurrency (2026-05-10): audits/2026-05-10-concurrency.md
+      - Error handling (2026-05-10): audits/2026-05-10-error-handling.md
+      - Memory & lifecycles (2026-05-10): audits/2026-05-10-memory-lifecycles.md
+      - Performance (2026-05-10): audits/2026-05-10-performance.md
+      - Safety state machine (2026-05-10): audits/2026-05-10-safety-state-machine.md
+      - Security (2026-05-10): audits/2026-05-10-security.md
+      - SwiftUI UX (2026-05-10): audits/2026-05-10-swiftui-ux.md
+  - Plans:
+      - Design (2026-03-31): plans/2026-03-31-battery-burner-design.md
+      - Implementation (2026-03-31): plans/2026-03-31-battery-burner-implementation.md
+      - CoAP resilience overview (2026-05-06): plans/2026-05-06-coap-resilience-overview.md
+      - Ticket 01 — force bypasses in-flight guard: plans/2026-05-06-ticket-01-force-bypasses-inflight-guard.md
+      - Ticket 02 — shortcut process timeout: plans/2026-05-06-ticket-02-shortcut-process-timeout.md
+      - Ticket 03 — cooldown after success: plans/2026-05-06-ticket-03-cooldown-after-success.md
+      - Ticket 04 — preflight cache + skip on wake: plans/2026-05-06-ticket-04-preflight-cache-and-skip-on-wake.md
+      - Ticket 05 — debounce settings observer: plans/2026-05-06-ticket-05-debounce-settings-observer.md
+      - Ticket 06 — manual re-test outlet button: plans/2026-05-06-ticket-06-manual-retest-outlet-button.md
+      - Ticket 07 — split status and error messages: plans/2026-05-06-ticket-07-split-status-and-error-messages.md
+      - Ticket 08 — load throttle hysteresis: plans/2026-05-06-ticket-08-load-throttle-hysteresis.md
+      - Ticket 09 — throttle system_profiler call: plans/2026-05-06-ticket-09-throttle-system-profiler-call.md
 
 plugins:
   - search

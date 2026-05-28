@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `fad124f` (fix: make ChargingController resilient to CoAP flakiness) — cooldown timestamps are now written inside the success branch on the main actor after `process.terminationStatus == 0`. See `ChargingController.swift`.
+
 # Ticket 03 — Record cooldown only on success
 
 **Severity:** Major

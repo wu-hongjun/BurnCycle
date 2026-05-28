@@ -16,6 +16,11 @@ struct HistoryEntry: Codable, Identifiable {
     }
 }
 
+/// Persists battery-health snapshots to `~/Library/Application Support/BurnCycle/history.json`.
+/// One entry is recorded on the first valid observation and again whenever the
+/// hardware cycle count advances, so the file grows by ~one row per real charge
+/// cycle (capped at `maxEntries`). Used by the History panel to chart capacity
+/// fade over time.
 @MainActor
 final class HistoryRecorder: ObservableObject {
     @Published var entries: [HistoryEntry] = []

@@ -35,6 +35,12 @@ func IOReportStateGetResidency(_ channel: CFDictionary, _ index: Int32) -> Int64
 
 // MARK: - SystemMonitor
 
+/// CPU / GPU utilisation and battery I/O power, polled every 3s.
+///  - CPU usage: mach `host_statistics` tick deltas.
+///  - GPU usage: IOReport "GPU Stats / GPU Performance States" residency
+///    (with an AGXAccelerator `PerformanceStatistics` fallback when the private
+///    IOReport entry points are unavailable).
+///  - Power: instantaneous V × I from `AppleSmartBattery` (negative when draining).
 @MainActor
 final class SystemMonitor: ObservableObject {
     @Published var cpuUsage: Double = 0

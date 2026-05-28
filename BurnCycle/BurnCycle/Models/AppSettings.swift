@@ -1,11 +1,14 @@
 import Foundation
 import SwiftUI
 
+/// How BurnCycle generates load while draining the battery.
 enum LoadMethod: String, CaseIterable {
     case mine = "Mine XMR"
     case stress = "Stress Test"
 }
 
+/// User-facing preferences. All values are backed by `@AppStorage` so they
+/// persist across launches and stay in sync with any view bound to the same key.
 @MainActor
 final class AppSettings: ObservableObject {
     @AppStorage("upperThreshold") var upperThreshold: Double = 90
@@ -18,6 +21,8 @@ final class AppSettings: ObservableObject {
     @AppStorage("pauseOnSleep") var pauseOnSleep: Bool = true
     @AppStorage("showInMenuBar") var showInMenuBar: Bool = false
 
+    /// Typed accessor over the raw `loadMethod` string. Falls back to `.stress`
+    /// if the stored value can't be parsed (e.g. a stale key from a prior build).
     var selectedLoadMethod: LoadMethod {
         get { LoadMethod(rawValue: loadMethod) ?? .stress }
         set { loadMethod = newValue.rawValue }

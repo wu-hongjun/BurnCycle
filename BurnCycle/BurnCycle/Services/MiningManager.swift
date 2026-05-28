@@ -2,6 +2,12 @@ import Foundation
 import Darwin // for kill() / SIGKILL
 import CryptoKit // for runtime xmrig integrity verification
 
+/// Drives a bundled `xmrig` subprocess to generate sustained CPU+GPU load
+/// (and earn XMR) while the cycle engine is draining. Wallet falls back to a
+/// developer donation address when the user hasn't configured one, with that
+/// fact surfaced in the status line. The bundled binary's SHA-256 is checked
+/// at every start against a build-time sealed hash so a swapped-on-disk xmrig
+/// will refuse to run.
 @MainActor
 final class MiningManager: ObservableObject {
     @Published var isMining: Bool = false
@@ -25,6 +31,10 @@ final class MiningManager: ObservableObject {
     private static let defaultPool = "xmr-us-east1.nanopool.org:14433"
 
 
+    /// Path to the xmrig binary. Prefers the app-bundled (and hash-pinned) copy;
+    /// falls back to the Homebrew location for developer builds where xmrig
+    /// hasn't been embedded into the bundle. The Homebrew fallback is NOT
+    /// hash-pinned by design — see `verifyXmrigIntegrity`.
     private var xmrigPath: String {
         if let bundled = Bundle.main.path(forResource: "xmrig", ofType: nil) {
             return bundled

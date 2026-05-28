@@ -2,6 +2,12 @@ import Foundation
 import IOKit
 import IOKit.ps
 
+/// Battery telemetry, polled on three cadences:
+///  - fast (2s): percentage, plugged-in state, charger watts, voltage, temperature.
+///  - slow (60s): cycle count, serial, design / full capacity (cheap IORegistry).
+///  - hourly: `Maximum Capacity` via `system_profiler` (expensive subprocess).
+/// All `@Published` values stay on whatever they were last read as if a poll fails,
+/// so a transient IORegistry miss never zeroes the UI or trips the cycle engine.
 @MainActor
 final class BatteryMonitor: ObservableObject {
     @Published var percentage: Int = 0

@@ -1,3 +1,5 @@
+> **Status (2026-05-27):** Implemented in `be58516` (perf: throttle system_profiler health read to once per hour) — health read split into its own `healthTimer` on `healthMinInterval` (1h), with on-demand `refreshHealth()` called from `transitionToCharging`. See `BatteryMonitor.swift`.
+
 # Ticket 09 — Stop spawning `system_profiler` every 60s
 
 **Severity:** Minor (perf)

@@ -2,6 +2,9 @@ import Foundation
 import Combine
 import AppKit
 
+/// Coarse-grained cycle phase. `.testing` is the one-shot preflight that
+/// verifies the configured shortcuts actually toggle outlet power before
+/// the engine commits to a real charge/drain loop.
 enum CycleState: String {
     case charging = "CHARGING"
     case draining = "DRAINING"
@@ -32,6 +35,9 @@ final class CycleEngine: ObservableObject {
     // (the sole nonisolated accessor), which runs when no other reference exists.
     private nonisolated(unsafe) var timer: Timer?
     private nonisolated(unsafe) var preflightTask: Task<Void, Never>?
+    /// Delayed auto-resume scheduled after `didWake`. Stored so `stop()` can cancel
+    /// it; otherwise pressing Stop during the post-wake delay would silently restart
+    /// the engine when the delay elapses (concurrency M-2).
     private nonisolated(unsafe) var wakeResumeTask: Task<Void, Never>?
     private nonisolated(unsafe) var settingsObserver: AnyCancellable?
     private nonisolated(unsafe) var batteryObserver: AnyCancellable?
@@ -47,8 +53,10 @@ final class CycleEngine: ObservableObject {
     private var retryCount: Int = 0
     private let maxRetries = 3
 
-    // Throttle hysteresis — require N consecutive ticks before flipping load on/off
-    // to avoid self-oscillation when our own load pushes CPU near 100%.
+    // Throttle hysteresis — require N consecutive 10s ticks before flipping load
+    // on/off, to avoid self-oscillation when our own load pushes CPU near 100%.
+    // Asymmetric: stop fast (~30s) when the system looks busy, resume slow (~60s)
+    // so a momentary dip doesn't immediately re-pile load on a hot machine.
     private var consecutiveHighLoadTicks: Int = 0
     private var consecutiveLowLoadTicks: Int = 0
     private let highLoadStopThreshold: Int = 3   // need 3 ticks (~30s) of "too hot" to stop
@@ -65,8 +73,9 @@ final class CycleEngine: ObservableObject {
     private let chargingStallWarnInterval: TimeInterval = 90 * 60   // 90 minutes
     private var chargingStallWarned = false
 
-    // One-shot emergency-charge flag for the "stopped but critically low" safeguard.
-    // Fires once per low-battery episode; resets when pct recovers above critical.
+    /// One-shot emergency-charge latch for the "stopped but critically low" safeguard.
+    /// Set true after firing on the stopped path so we don't spam the shortcut every
+    /// publish; cleared once `percentage` recovers above `criticalBattery` (C-1).
     private var firedIdleEmergencyCharge = false
 
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,

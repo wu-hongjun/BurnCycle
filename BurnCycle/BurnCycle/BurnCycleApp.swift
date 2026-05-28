@@ -240,6 +240,9 @@ struct MenuBarPopover: View {
 
 /// Reopen the main window when the dock icon is clicked or app is re-launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Bring an existing window forward when the user re-activates the app with
+    /// no visible windows (Dock click, second launch) — without this, clicking
+    /// the Dock icon does nothing once the main window has been closed.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             for window in sender.windows where window.canBecomeMain {
