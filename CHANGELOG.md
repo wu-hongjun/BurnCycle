@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] — 2026-05-27
+## [1.1.0] — 2026-05-28
 
-Remediation release. Ten parallel audits (dated 2026-05-10) covering safety,
+Remediation + History-chart release. Ten parallel audits (dated 2026-05-10) covering safety,
 error handling, concurrency, memory lifecycles, performance, security,
 SwiftUI UX, and build/distribution were triaged and implemented on
 `fix/audit-remediation`. Build is clean under Swift 6 strict concurrency
@@ -19,6 +19,13 @@ status table; highlights below.
 
 ### Added
 
+- **History chart — capacity (mAh) trend.** Full-charge capacity is now plotted
+  on a second (right) axis alongside Apple-reported health %, sharing one plot.
+  Health is a flat integer for 100+ cycles; capacity has finer resolution and
+  reveals the real degradation trend. Both render as clean overlapping lines.
+- **History chart — hover readout.** Hovering the chart marks the nearest entry
+  with a vertical rule and shows its exact cycle, capacity, health, and
+  timestamp in a readout above the chart.
 - Hardened-runtime entitlements file at `BurnCycle/BurnCycle/BurnCycle.entitlements`.
   App Sandbox stays off (subprocess + private IOKit); hardened runtime is on.
 - Runtime SHA-256 verification of bundled `xmrig` in `MiningManager`, checked
