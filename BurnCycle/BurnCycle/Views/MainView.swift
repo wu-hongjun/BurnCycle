@@ -15,6 +15,8 @@ struct MainView: View {
     @State private var showInfo = false
     @State private var showHistory = false
     @State private var showClearConfirm = false
+    /// History-chart entry currently under the cursor (nil when not hovering).
+    @State private var hoverEntry: HistoryEntry?
 
     var body: some View {
         VStack(spacing: 10) {
@@ -294,6 +296,25 @@ struct MainView: View {
                     // so a single chart keeps both series perfectly aligned, with the
                     // trailing axis de-normalizing the ticks back to mAh.
                     if history.entries.count >= 2 {
+                        // Hover readout — reflects the entry under the cursor. Fixed
+                        // height so the layout doesn't jump as it appears/clears.
+                        HStack(spacing: 8) {
+                            if let e = hoverEntry {
+                                Text("Cycle \(e.cycleCount)").fontWeight(.semibold)
+                                Text("\(e.fullChargeCapacityMAh) mAh").foregroundStyle(.blue)
+                                Text("\(e.healthPercent)%").foregroundStyle(.green)
+                                Spacer()
+                                Text(e.timestamp.formatted(date: .abbreviated, time: .shortened))
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Hover the chart for exact values")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                        }
+                        .font(.caption2)
+                        .frame(height: 14)
+
                         Chart {
                             ForEach(history.entries) { entry in
                                 LineMark(
@@ -311,6 +332,16 @@ struct MainView: View {
                                 )
                                 .foregroundStyle(by: .value("Series", "Capacity (mAh)"))
                                 .interpolationMethod(.monotone)
+                            }
+
+                            // Hover feedback: a vertical rule marks the entry under
+                            // the cursor; the exact values are shown in the readout
+                            // line above the chart (the 120pt frame is too tight for
+                            // an in-chart annotation without clipping).
+                            if let e = hoverEntry {
+                                RuleMark(x: .value("Cycle", e.cycleCount))
+                                    .foregroundStyle(.gray.opacity(0.5))
+                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 2]))
                             }
                         }
                         .chartForegroundStyleScale(["Health %": Color.green, "Capacity (mAh)": Color.blue])
@@ -334,6 +365,22 @@ struct MainView: View {
                         }
                         .chartXAxisLabel("Cycle")
                         .chartLegend(position: .bottom, spacing: 4)
+                        .chartOverlay { proxy in
+                            GeometryReader { geo in
+                                Rectangle().fill(.clear).contentShape(Rectangle())
+                                    .onContinuousHover { phase in
+                                        switch phase {
+                                        case .active(let location):
+                                            guard let plotFrame = proxy.plotFrame else { hoverEntry = nil; return }
+                                            let xPos = location.x - geo[plotFrame].origin.x
+                                            guard let cycle = proxy.value(atX: xPos, as: Int.self) else { hoverEntry = nil; return }
+                                            hoverEntry = nearestEntry(toCycle: cycle)
+                                        case .ended:
+                                            hoverEntry = nil
+                                        }
+                                    }
+                            }
+                        }
                         .frame(height: 120)
                         .padding(.bottom, 4)
 
@@ -463,6 +510,11 @@ struct MainView: View {
         let hLo = Double(h.lowerBound), hHi = Double(h.upperBound)
         guard hHi > hLo else { return c.lowerBound }
         return Int((cLo + (y - hLo) / (hHi - hLo) * (cHi - cLo)).rounded())
+    }
+
+    /// Entry whose cycle count is closest to `cycle` (the hovered x position).
+    private func nearestEntry(toCycle cycle: Int) -> HistoryEntry? {
+        history.entries.min(by: { abs($0.cycleCount - cycle) < abs($1.cycleCount - cycle) })
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
