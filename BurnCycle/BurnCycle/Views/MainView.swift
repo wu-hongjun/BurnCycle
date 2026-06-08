@@ -285,28 +285,56 @@ struct MainView: View {
             // History panel
             if showHistory {
                 VStack(alignment: .leading, spacing: 6) {
-                    // Chart of health % over cycle count (only meaningful with 2+ entries)
+                    // Chart of health % (left axis) and full-charge capacity in mAh
+                    // (right axis) over cycle count. Apple's reported health is an
+                    // integer that holds the same value for 100+ cycles, so on its
+                    // own it's a flat line; capacity in mAh has far finer resolution
+                    // and reveals the actual degradation trend. Capacity is plotted
+                    // in the health axis' coordinate space (see capacityToHealthScale)
+                    // so a single chart keeps both series perfectly aligned, with the
+                    // trailing axis de-normalizing the ticks back to mAh.
                     if history.entries.count >= 2 {
-                        Chart(history.entries) { entry in
-                            LineMark(
-                                x: .value("Cycle", entry.cycleCount),
-                                y: .value("Health %", entry.healthPercent)
-                            )
-                            .foregroundStyle(.green)
-                            .interpolationMethod(.monotone)
+                        Chart {
+                            ForEach(history.entries) { entry in
+                                LineMark(
+                                    x: .value("Cycle", entry.cycleCount),
+                                    y: .value("Health %", Double(entry.healthPercent)),
+                                    series: .value("Series", "Health %")
+                                )
+                                .foregroundStyle(by: .value("Series", "Health %"))
+                                .interpolationMethod(.monotone)
 
-                            PointMark(
-                                x: .value("Cycle", entry.cycleCount),
-                                y: .value("Health %", entry.healthPercent)
-                            )
-                            .foregroundStyle(.green)
-                            .symbolSize(20)
+                                LineMark(
+                                    x: .value("Cycle", entry.cycleCount),
+                                    y: .value("Capacity", capacityToHealthScale(entry.fullChargeCapacityMAh)),
+                                    series: .value("Series", "Capacity (mAh)")
+                                )
+                                .foregroundStyle(by: .value("Series", "Capacity (mAh)"))
+                                .interpolationMethod(.monotone)
+                            }
                         }
-                        .chartYScale(domain: chartHealthDomain)
+                        .chartForegroundStyleScale(["Health %": Color.green, "Capacity (mAh)": Color.blue])
+                        .chartYScale(domain: Double(chartHealthDomain.lowerBound)...Double(chartHealthDomain.upperBound))
                         .chartXScale(domain: chartCycleDomain)
-                        .chartYAxisLabel("Health %")
+                        .chartYAxis {
+                            // Leading axis: real health % ticks (green).
+                            AxisMarks(position: .leading) { value in
+                                AxisGridLine()
+                                AxisTick()
+                                if let v = value.as(Double.self) {
+                                    AxisValueLabel { Text("\(Int(v.rounded()))").foregroundStyle(.green) }
+                                }
+                            }
+                            // Trailing axis: same tick positions, de-normalized to mAh (blue).
+                            AxisMarks(position: .trailing) { value in
+                                if let v = value.as(Double.self) {
+                                    AxisValueLabel { Text("\(healthScaleToCapacity(v))").foregroundStyle(.blue) }
+                                }
+                            }
+                        }
                         .chartXAxisLabel("Cycle")
-                        .frame(height: 100)
+                        .chartLegend(position: .bottom, spacing: 4)
+                        .frame(height: 120)
                         .padding(.bottom, 4)
 
                         Divider()
@@ -404,6 +432,37 @@ struct MainView: View {
         if lo == hi { return (lo - 1)...(hi + 1) }
         let pad: Int = max(1, (hi - lo) / 10)
         return max(0, lo - pad)...(hi + pad)
+    }
+
+    /// Auto-zoomed mAh range for the capacity (right) axis. Padded so the trend
+    /// fills the plot rather than hugging an edge.
+    private var chartCapacityDomain: ClosedRange<Int> {
+        let values: [Int] = history.entries.map { $0.fullChargeCapacityMAh }
+        guard let lo = values.min(), let hi = values.max() else { return 0...1 }
+        if lo == hi { return (lo - 10)...(hi + 10) }
+        let pad: Int = max(5, (hi - lo) / 4)
+        return (lo - pad)...(hi + pad)
+    }
+
+    /// Map a capacity (mAh) into the health axis' coordinate space so both
+    /// series share one Y scale and stay perfectly aligned. Linear remap from
+    /// the capacity domain onto the health domain.
+    private func capacityToHealthScale(_ capacity: Int) -> Double {
+        let h = chartHealthDomain, c = chartCapacityDomain
+        let cLo = Double(c.lowerBound), cHi = Double(c.upperBound)
+        let hLo = Double(h.lowerBound), hHi = Double(h.upperBound)
+        guard cHi > cLo else { return hLo }
+        return hLo + (Double(capacity) - cLo) / (cHi - cLo) * (hHi - hLo)
+    }
+
+    /// Inverse of `capacityToHealthScale` — turns a health-axis tick position
+    /// back into the mAh value it represents, for the trailing axis labels.
+    private func healthScaleToCapacity(_ y: Double) -> Int {
+        let h = chartHealthDomain, c = chartCapacityDomain
+        let cLo = Double(c.lowerBound), cHi = Double(c.upperBound)
+        let hLo = Double(h.lowerBound), hHi = Double(h.upperBound)
+        guard hHi > hLo else { return c.lowerBound }
+        return Int((cLo + (y - hLo) / (hHi - hLo) * (cHi - cLo)).rounded())
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
