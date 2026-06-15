@@ -78,14 +78,23 @@ final class CycleEngine: ObservableObject {
     /// publish; cleared once `percentage` recovers above `criticalBattery` (C-1).
     private var firedIdleEmergencyCharge = false
 
+    private let watchdog: Watchdog
+    /// Tracks the last-applied watchdog setting so the debounced settings observer
+    /// only reloads the LaunchAgent when the toggle actually changes.
+    private var lastWatchdogEnabled: Bool
+    private nonisolated(unsafe) var terminateObserver: NSObjectProtocol?
+
     init(battery: BatteryMonitor, charging: ChargingController, mining: MiningManager,
-         stress: StressManager, system: SystemMonitor, settings: AppSettings) {
+         stress: StressManager, system: SystemMonitor, settings: AppSettings,
+         watchdog: Watchdog) {
         self.battery = battery
         self.charging = charging
         self.mining = mining
         self.stress = stress
         self.system = system
         self.settings = settings
+        self.watchdog = watchdog
+        self.lastWatchdogEnabled = settings.watchdogEnabled
 
         settingsObserver = settings.objectWillChange
             .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
@@ -113,6 +122,20 @@ final class CycleEngine: ObservableObject {
                                        object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.handleWake() }
         }
+
+        // Clean-quit catch-all: a graceful termination (⌘Q, logout, launchd
+        // bootout) fires this so we tear down the watchdog and never leave the
+        // outlet OFF. A jetsam SIGKILL CANNOT fire it — which is precisely why a
+        // surviving sentinel is a reliable "we were killed" signal.
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            // Run SYNCHRONOUSLY (not via `Task { @MainActor }`): the process is
+            // terminating, and a deferred hop may never execute before exit,
+            // leaving the sentinel uncleared → a spurious watchdog relaunch after
+            // a clean quit. willTerminate is delivered on the main thread (queue:
+            // .main), so assuming MainActor isolation here is valid.
+            MainActor.assumeIsolated { self?.handleCleanQuit() }
+        }
     }
 
     deinit {
@@ -122,6 +145,7 @@ final class CycleEngine: ObservableObject {
         let nc = NSWorkspace.shared.notificationCenter
         if let sleepObserver { nc.removeObserver(sleepObserver) }
         if let wakeObserver { nc.removeObserver(wakeObserver) }
+        if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
         timer?.invalidate()
         preflightTask?.cancel()
         wakeResumeTask?.cancel()
@@ -162,9 +186,36 @@ final class CycleEngine: ObservableObject {
             // bare resume that bypasses preflight would be unsafe (M-4). In that case
             // we just stop; the user re-presses Start and preflight runs fresh.
             wasRunningBeforeSleep = (state == .charging || state == .draining)
-            stop()
+            pauseForSleep()
             setStatus("Paused for sleep")
         }
+    }
+
+    /// Pause for sleep WITHOUT clearing the watchdog sentinel. Unlike `stop()`
+    /// (a deliberate user stop), a sleep pause must preserve the "cycle active"
+    /// marker: if the app is jetsam-killed while asleep, the watchdog still
+    /// recovers on wake. We also best-effort restore charging so the machine
+    /// charges (safely) during sleep rather than sitting on battery.
+    private func pauseForSleep() {
+        let wasDraining = state == .draining
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+        preflightTask?.cancel()
+        preflightTask = nil
+        wakeResumeTask?.cancel()
+        wakeResumeTask = nil
+        stopAllLoad()
+        if wasDraining || !battery.isPluggedIn {
+            charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        }
+        retryCount = 0
+        verifyTicksRemaining = 0
+        chargingStartedAt = nil
+        chargingStallWarned = false
+        resetThrottleHysteresis()
+        state = .idle
+        // NOTE: deliberately does NOT call watchdog.clearCycling().
     }
 
     private func handleWake() {
@@ -354,6 +405,7 @@ final class CycleEngine: ObservableObject {
     }
 
     func stop() {
+        let wasDraining = state == .draining
         isRunning = false
         timer?.invalidate()
         timer = nil
@@ -362,6 +414,14 @@ final class CycleEngine: ObservableObject {
         wakeResumeTask?.cancel()
         wakeResumeTask = nil
         stopAllLoad()
+        // No longer cycling — the watchdog must not relaunch us, and on-launch
+        // recovery must not fire.
+        watchdog.clearCycling()
+        // Fail-safe: never leave the outlet OFF when we're not actively cycling.
+        // If we were draining (or are otherwise on battery), restore charging.
+        if wasDraining || !battery.isPluggedIn {
+            charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        }
         clearMessages()
         retryCount = 0
         verifyTicksRemaining = 0
@@ -442,6 +502,9 @@ final class CycleEngine: ObservableObject {
     }
 
     private func onSettingsChanged() {
+        // Reconcile the watchdog toggle even when idle (it gates the failsafe).
+        reconcileWatchdog()
+
         guard isRunning else { return }
 
         // Threshold changes mid-cycle should take effect immediately rather than
@@ -655,6 +718,7 @@ final class CycleEngine: ObservableObject {
         chargingStallWarned = false
         stopAllLoad()
         charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        markCyclingActive()
         verifyTicksRemaining = 2 // verify in ~20s
         resetThrottleHysteresis()
         // A drain just finished — meaningful moment to refresh battery health.
@@ -672,6 +736,7 @@ final class CycleEngine: ObservableObject {
         chargingStartedAt = nil
         chargingStallWarned = false
         charging.stopCharging(shortcutName: settings.stopChargingShortcut, force: true)
+        markCyclingActive()
         if settings.loadEnabled {
             if isExternalLoadSafe() {
                 startLoad()
@@ -682,5 +747,72 @@ final class CycleEngine: ObservableObject {
         verifyTicksRemaining = 2
         resetThrottleHysteresis()
         clearMessages()
+    }
+
+    // MARK: - Crash / termination failsafe
+
+    /// Record that a cycle is active so the watchdog (and on-launch recovery) can
+    /// detect an unexpected death. No-op when the user has disabled the watchdog.
+    private func markCyclingActive() {
+        guard settings.watchdogEnabled else { return }
+        watchdog.markCycling(phase: state.rawValue)
+    }
+
+    /// Called once at app launch. If the sentinel survived from a previous run,
+    /// we were killed mid-cycle (jetsam/crash/force-quit) — recover fail-safe:
+    /// force the outlet ON immediately, clear any orphaned load, then resume the
+    /// cycle so it continues unattended.
+    func recoverFromUnexpectedExitIfNeeded() {
+        guard !isRunning, watchdog.sentinelExists else { return }
+        // If the user has since disabled the watchdog, just clear the stale marker.
+        guard settings.watchdogEnabled else { watchdog.clearCycling(); return }
+        guard battery.hasBattery else { watchdog.clearCycling(); return }
+
+        // FAIL-SAFE first: charging is always the safe direction for the machine.
+        charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        // A crash can orphan the xmrig child (it outlives the parent); stop it.
+        mining.stop()
+
+        // Crash-loop guard: if we keep dying right after recovery, stop the
+        // relaunch loop. The battery is already safe (charging, above); we just
+        // don't resume cycling and ask the user to intervene.
+        if watchdog.isRecoveryLooping() {
+            watchdog.clearCycling()
+            setError("Repeated unexpected exits — auto-resume paused for safety. Charging is on; press Start to resume.")
+            return
+        }
+
+        isRunning = true
+        clearMessages()
+        setStatus("Recovered from an unexpected exit — charging restored, resuming cycle.")
+        battery.update()
+        system.update()
+        // Resume without the disruptive preflight (it would toggle the outlet);
+        // verifyPowerState re-checks the real power state within ~20s anyway.
+        beginCycling()
+    }
+
+    /// Graceful-termination handler (⌘Q / logout / launchd bootout). Tear down the
+    /// active-cycle marker and, if we were draining, leave the outlet ON so a
+    /// closed app never sits on battery with the outlet off.
+    private func handleCleanQuit() {
+        let wasDraining = isRunning && state == .draining
+        watchdog.clearCycling()
+        if wasDraining || (isRunning && !battery.isPluggedIn) {
+            charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
+        }
+    }
+
+    /// Apply the watchdog enable/disable setting (called from the debounced
+    /// settings observer, only acting on an actual change).
+    private func reconcileWatchdog() {
+        guard settings.watchdogEnabled != lastWatchdogEnabled else { return }
+        lastWatchdogEnabled = settings.watchdogEnabled
+        if settings.watchdogEnabled {
+            watchdog.install()
+            if isRunning { markCyclingActive() }
+        } else {
+            watchdog.uninstall()
+        }
     }
 }
