@@ -12,6 +12,7 @@ final class AppServices: ObservableObject {
     let settings = AppSettings()
     let system = SystemMonitor()
     let history = HistoryRecorder()
+    let watchdog = Watchdog()
     let engine: CycleEngine
 
     private var historyObserver: AnyCancellable?
@@ -24,12 +25,26 @@ final class AppServices: ObservableObject {
             mining: mining,
             stress: stress,
             system: system,
-            settings: settings
+            settings: settings,
+            watchdog: watchdog
         )
 
         // Start monitoring services
         battery.startMonitoring()
         system.startMonitoring()
+
+        // Crash/termination failsafe. Keep the watchdog LaunchAgent in sync with
+        // the setting, then recover if a previous run was killed mid-cycle.
+        if settings.watchdogEnabled {
+            watchdog.install()
+        } else {
+            watchdog.uninstall()
+        }
+        // Defer recovery slightly so the first battery poll has populated state.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            engine.recoverFromUnexpectedExitIfNeeded()
+        }
 
         // Record history snapshots when battery slow values change.
         // removeDuplicates() on each upstream avoids re-firing on every 60s slow-tick

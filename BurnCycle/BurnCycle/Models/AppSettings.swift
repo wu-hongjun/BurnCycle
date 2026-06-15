@@ -21,6 +21,12 @@ final class AppSettings: ObservableObject {
     @AppStorage("pauseOnSleep") var pauseOnSleep: Bool = true
     @AppStorage("showInMenuBar") var showInMenuBar: Bool = false
 
+    /// Crash/termination failsafe. When on, a lightweight LaunchAgent relaunches
+    /// BurnCycle if it is killed (jetsam/crash/force-quit) while a cycle is active,
+    /// and the app restores charging on recovery so a dead app can't drain the
+    /// battery to 0%. Default on — it's a safety feature.
+    @AppStorage("watchdogEnabled") var watchdogEnabled: Bool = true
+
     /// Typed accessor over the raw `loadMethod` string. Falls back to `.stress`
     /// if the stored value can't be parsed (e.g. a stale key from a prior build).
     var selectedLoadMethod: LoadMethod {

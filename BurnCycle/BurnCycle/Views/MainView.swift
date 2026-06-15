@@ -243,6 +243,11 @@ struct MainView: View {
                     Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                     Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
                     Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle("Relaunch if killed mid-cycle (failsafe)", isOn: $settings.watchdogEnabled)
+                        Text("Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
 
                     HStack {
                         Spacer()

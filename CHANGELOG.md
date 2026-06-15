@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Crash / termination failsafe.** If BurnCycle is terminated while *draining*
+  (smart outlet OFF) — by the macOS memory-pressure killer (jetsam), a crash, or
+  a force-quit — the battery could previously drain toward 0% with nothing to
+  turn the outlet back on. A lightweight `Watchdog` LaunchAgent now relaunches
+  the app within ~20s if it dies while a cycle is active, and on launch the
+  engine recovers fail-safe: it forces charging ON, kills any orphaned `xmrig`,
+  and resumes the cycle. A sentinel file marks "cycle active"; a clean stop/quit
+  removes it (so no relaunch), while a SIGKILL cannot — a reliable
+  "killed unexpectedly" signal. A crash-loop guard stops auto-resume (battery
+  left safely charging) after repeated rapid failures. Toggle in Settings ▸
+  Behavior ("Relaunch if killed mid-cycle"), on by default. `stop()` and clean
+  quit now also restore charging when on battery, so the outlet is never left
+  OFF without a live cycling app.
+
+### Investigation
+
+- Diagnosed the "mysteriously closing" reports: no code-crash reports exist
+  (the state machine isn't faulting); the app's resident memory grows steadily
+  (~2.6× over 4 days in captured JetsamEvent snapshots), making it a jetsam
+  target under memory pressure. The failsafe above makes such a kill
+  non-catastrophic; the underlying leak is tracked separately.
+
 ## [1.1.0] — 2026-05-28
 
 Remediation + History-chart release. Ten parallel audits (dated 2026-05-10) covering safety,
