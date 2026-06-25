@@ -92,13 +92,6 @@ struct MainView: View {
 
             // Controls
             HStack {
-                Button("Settings") {
-                    showSettings.toggle()
-                    if showSettings { showInfo = false; showHistory = false }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
                 Button("Info") {
                     showInfo.toggle()
                     if showInfo { showSettings = false; showHistory = false }
@@ -109,6 +102,13 @@ struct MainView: View {
                 Button("History") {
                     showHistory.toggle()
                     if showHistory { showSettings = false; showInfo = false }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Settings") {
+                    showSettings.toggle()
+                    if showSettings { showInfo = false; showHistory = false }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
