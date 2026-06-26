@@ -15,8 +15,45 @@ struct MainView: View {
     @State private var showInfo = false
     @State private var showHistory = false
     @State private var showClearConfirm = false
+    @State private var showAdvanced = false
     /// History-chart entry currently under the cursor (nil when not hovering).
     @State private var hoverEntry: HistoryEntry?
+
+    // Draft threshold values for the Settings input boxes. They hold the user's
+    // edits until "Save" commits them to AppSettings, so typing an intermediate
+    // value (e.g. "8" on the way to "80") doesn't momentarily drive the engine.
+    @State private var upperDraft = 90
+    @State private var lowerDraft = 5
+    @State private var thresholdError: String?
+
+    /// True when the draft boxes differ from the saved thresholds (enables Save).
+    private var thresholdsDirty: Bool {
+        upperDraft != Int(settings.upperThreshold) || lowerDraft != Int(settings.lowerThreshold)
+    }
+
+    /// Reload the draft boxes from the saved settings (called when the panel opens
+    /// so discarded edits don't linger, and after a successful Save).
+    private func syncThresholdDrafts() {
+        upperDraft = Int(settings.upperThreshold)
+        lowerDraft = Int(settings.lowerThreshold)
+        thresholdError = nil
+    }
+
+    /// Validate and commit the draft thresholds. Ranges mirror the old sliders
+    /// (charge 50–100, drain 5–50) and the engine's required 5% gap.
+    private func saveThresholds() {
+        let upper = min(max(upperDraft, 50), 100)
+        let lower = min(max(lowerDraft, 5), 50)
+        guard Double(upper) >= Double(lower) + AppSettings.minThresholdGap else {
+            thresholdError = "Charge must be at least \(Int(AppSettings.minThresholdGap))% above drain."
+            return
+        }
+        settings.upperThreshold = Double(upper)
+        settings.lowerThreshold = Double(lower)
+        upperDraft = upper
+        lowerDraft = lower
+        thresholdError = nil
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -83,11 +120,17 @@ struct MainView: View {
             // to avoid showing duplicate / stale/contradictory error lines.
             if let err = engine.errorMessage {
                 Text(err).font(.caption2).foregroundColor(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if let error = charging.lastError {
                 Text(error).font(.caption2).foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let status = engine.statusMessage {
                 Text(status).font(.caption2).foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Controls
@@ -132,68 +175,33 @@ struct MainView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     // -- Battery Thresholds --
                     Text("Battery Thresholds").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-                    VStack(alignment: .leading) {
-                        Text("Charge to: \(Int(settings.upperThreshold))%")
-                        Slider(value: $settings.upperThreshold, in: 50...100, step: 5)
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Text("Charge to")
+                            TextField("", value: $upperDraft, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 44)
+                            Text("%")
+                        }
+                        HStack(spacing: 4) {
+                            Text("Drain to")
+                            TextField("", value: $lowerDraft, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 44)
+                            Text("%")
+                        }
+                        Spacer()
+                        Button("Save") { saveThresholds() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(!thresholdsDirty)
                     }
-                    VStack(alignment: .leading) {
-                        Text("Drain to: \(Int(settings.lowerThreshold))%")
-                        Slider(value: $settings.lowerThreshold, in: 5...50, step: 5)
-                    }
-
-                    // -- Load Settings --
-                    Text("Load Generation").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-
-                    Toggle("Generate load while draining", isOn: $settings.loadEnabled)
-
-                    if settings.loadEnabled {
-                        Picker("Method", selection: $settings.loadMethod) {
-                            ForEach(LoadMethod.allCases, id: \.rawValue) { method in
-                                Text(method.rawValue).tag(method.rawValue)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        if settings.selectedLoadMethod == .mine {
-                            VStack(alignment: .leading) {
-                                Text("XMR Wallet (empty = default)")
-                                    .font(.caption).foregroundColor(.secondary)
-                                TextField("Wallet address", text: $settings.walletAddress)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(.caption, design: .monospaced))
-                            }
-
-                            if mining.isMining {
-                                HStack {
-                                    Text("Mining: \(mining.status)")
-                                    Spacer()
-                                    Text(mining.hashrate).fontWeight(.medium).foregroundColor(.green)
-                                }
-                                .font(.caption)
-                            }
-                        } else {
-                            Text("Stress test uses all CPU cores + GPU via Metal. No internet required.")
-                                .font(.caption).foregroundColor(.secondary)
-
-                            if stress.isRunning {
-                                HStack {
-                                    Text("Status:")
-                                    Text(stress.status).fontWeight(.medium).foregroundColor(.orange)
-                                }
-                                .font(.caption)
-                            }
-
-                            if let stressErr = stress.lastError {
-                                Label(stressErr, systemImage: "exclamationmark.triangle.fill")
-                                    .font(.caption).foregroundColor(.orange)
-                            }
-                        }
-
-                        if engine.loadThrottled {
-                            Label("Load paused — system busy (CPU/GPU > 80%)",
-                                  systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption).foregroundColor(.orange)
-                        }
+                    if let thresholdError {
+                        Text(thresholdError)
+                            .font(.caption2).foregroundColor(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     // -- Outlet Control --
@@ -249,6 +257,67 @@ struct MainView: View {
                             .font(.caption2).foregroundColor(.secondary)
                     }
 
+                    // -- Advanced (collapsed): load generation --
+                    DisclosureGroup(isExpanded: $showAdvanced) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle("Generate load while draining", isOn: $settings.loadEnabled)
+
+                            if settings.loadEnabled {
+                                Picker("Method", selection: $settings.loadMethod) {
+                                    ForEach(LoadMethod.allCases, id: \.rawValue) { method in
+                                        Text(method.rawValue).tag(method.rawValue)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+
+                                if settings.selectedLoadMethod == .mine {
+                                    VStack(alignment: .leading) {
+                                        Text("XMR Wallet (empty = default)")
+                                            .font(.caption).foregroundColor(.secondary)
+                                        TextField("Wallet address", text: $settings.walletAddress)
+                                            .textFieldStyle(.roundedBorder)
+                                            .font(.system(.caption, design: .monospaced))
+                                    }
+
+                                    if mining.isMining {
+                                        HStack {
+                                            Text("Mining: \(mining.status)")
+                                            Spacer()
+                                            Text(mining.hashrate).fontWeight(.medium).foregroundColor(.green)
+                                        }
+                                        .font(.caption)
+                                    }
+                                } else {
+                                    Text("Stress test uses all CPU cores + GPU via Metal. No internet required.")
+                                        .font(.caption).foregroundColor(.secondary)
+
+                                    if stress.isRunning {
+                                        HStack {
+                                            Text("Status:")
+                                            Text(stress.status).fontWeight(.medium).foregroundColor(.orange)
+                                        }
+                                        .font(.caption)
+                                    }
+
+                                    if let stressErr = stress.lastError {
+                                        Label(stressErr, systemImage: "exclamationmark.triangle.fill")
+                                            .font(.caption).foregroundColor(.orange)
+                                    }
+                                }
+
+                                if engine.loadThrottled {
+                                    Label("Load paused — system busy (CPU/GPU > 80%)",
+                                          systemImage: "exclamationmark.triangle.fill")
+                                        .font(.caption).foregroundColor(.orange)
+                                }
+                            }
+                        }
+                        .padding(.top, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } label: {
+                        Text("Advanced").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    }
+
                     HStack {
                         Spacer()
                         Button("Quit BurnCycle") {
@@ -261,6 +330,7 @@ struct MainView: View {
                 }
                 .font(.callout)
                 .padding(.top, 4)
+                .onAppear { syncThresholdDrafts() }
             }
 
             // Info panel

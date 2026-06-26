@@ -449,10 +449,15 @@ final class CycleEngine: ObservableObject {
                 if !firedIdleEmergencyCharge {
                     firedIdleEmergencyCharge = true
                     charging.startCharging(shortcutName: settings.startChargingShortcut, force: true)
-                    setError("Critically low (\(pct)%) — forced an emergency charge. Press Start to resume cycling.")
+                    setError("Emergency charge at \(pct)% — press Start to resume.")
                 }
-            } else if pct > criticalBattery {
+            } else if firedIdleEmergencyCharge {
+                // Emergency resolved — either plugged in (even while still at/below
+                // critical%) or recovered above critical. Disarm the one-shot latch
+                // and clear its now-stale message; the stopped engine has no tick
+                // timer, so this is the only place the idle alert gets cleared.
                 firedIdleEmergencyCharge = false
+                clearMessages()
             }
             return
         }
