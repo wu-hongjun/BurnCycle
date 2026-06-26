@@ -239,16 +239,6 @@ struct MainView: View {
                             Text("Shortcut name changes apply on the next charge/drain phase.")
                                 .font(.caption2).foregroundColor(.secondary)
                         }
-
-                        HStack {
-                            Spacer()
-                            Button("Re-test outlet on next Start") {
-                                engine.invalidatePreflightCache()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(engine.isRunning || !engine.hasCachedPreflight)
-                        }
                     }
 
                     Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
@@ -336,6 +326,21 @@ struct MainView: View {
                             } else {
                                 Text("Turn on “Generate load while draining” to pick a load method.")
                                     .font(.caption).foregroundColor(.secondary)
+                            }
+
+                            Divider()
+
+                            HStack(spacing: 4) {
+                                Button("Force re-test before next Start") {
+                                    engine.invalidatePreflightCache()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(engine.isRunning || !engine.hasCachedPreflight)
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.secondary)
+                                    .help("Before the first Start, BurnCycle flips your outlet off then on to confirm the Shortcut really controls power. That check is reused for 30 minutes. Use this to force a fresh check after moving the plug or changing hubs.")
+                                Spacer()
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
