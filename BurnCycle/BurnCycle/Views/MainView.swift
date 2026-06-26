@@ -208,29 +208,32 @@ struct MainView: View {
                     Text("Outlet Control").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Start Charging Shortcut")
-                            Spacer()
-                            Button("Test") {
-                                charging.testStartCharging(shortcutName: settings.startChargingShortcut)
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text("Start").font(.caption)
+                                    Button("Test") {
+                                        charging.testStartCharging(shortcutName: settings.startChargingShortcut)
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.mini)
+                                    .disabled(charging.isRunningShortcut)
+                                }
+                                TextField("Start shortcut", text: $settings.startChargingShortcut)
+                                    .textFieldStyle(.roundedBorder)
                             }
-                            .buttonStyle(.bordered).controlSize(.mini)
-                            .disabled(charging.isRunningShortcut)
-                        }
-                        TextField("Shortcut name", text: $settings.startChargingShortcut)
-                            .textFieldStyle(.roundedBorder)
-
-                        HStack {
-                            Text("Stop Charging Shortcut")
-                            Spacer()
-                            Button("Test") {
-                                charging.testStopCharging(shortcutName: settings.stopChargingShortcut)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text("Stop").font(.caption)
+                                    Button("Test") {
+                                        charging.testStopCharging(shortcutName: settings.stopChargingShortcut)
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.mini)
+                                    .disabled(charging.isRunningShortcut)
+                                }
+                                TextField("Stop shortcut", text: $settings.stopChargingShortcut)
+                                    .textFieldStyle(.roundedBorder)
                             }
-                            .buttonStyle(.bordered).controlSize(.mini)
-                            .disabled(charging.isRunningShortcut)
                         }
-                        TextField("Shortcut name", text: $settings.stopChargingShortcut)
-                            .textFieldStyle(.roundedBorder)
 
                         if engine.isRunning {
                             Text("Shortcut name changes apply on the next charge/drain phase.")
@@ -251,19 +254,39 @@ struct MainView: View {
                     Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                     Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
                     Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Toggle("Relaunch if killed mid-cycle (failsafe)", isOn: $settings.watchdogEnabled)
-                        Text("Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
-                            .font(.caption2).foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Toggle("Relaunch if killed mid-cycle", isOn: $settings.watchdogEnabled)
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.secondary)
+                            .help("Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
+                        Spacer()
                     }
 
-                    // -- Advanced (collapsed): load generation --
-                    DisclosureGroup(isExpanded: $showAdvanced) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Toggle("Generate load while draining", isOn: $settings.loadEnabled)
+                    Text("Load Generation").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    Toggle("Generate load while draining", isOn: $settings.loadEnabled)
 
+                    // -- Advanced (collapsed): load method --
+                    // Hand-rolled disclosure: a plain Button toggling `showAdvanced`
+                    // is reliable both ways, unlike DisclosureGroup(isExpanded:) which
+                    // can stick open when it hosts controls (Picker/TextField/Toggle).
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showAdvanced.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                            Text("Advanced").font(.caption).fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .foregroundColor(.secondary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if showAdvanced {
+                        VStack(alignment: .leading, spacing: 8) {
                             if settings.loadEnabled {
-                                Picker("Method", selection: $settings.loadMethod) {
+                                Picker("Load Method", selection: $settings.loadMethod) {
                                     ForEach(LoadMethod.allCases, id: \.rawValue) { method in
                                         Text(method.rawValue).tag(method.rawValue)
                                     }
@@ -310,12 +333,12 @@ struct MainView: View {
                                           systemImage: "exclamationmark.triangle.fill")
                                         .font(.caption).foregroundColor(.orange)
                                 }
+                            } else {
+                                Text("Turn on “Generate load while draining” to pick a load method.")
+                                    .font(.caption).foregroundColor(.secondary)
                             }
                         }
-                        .padding(.top, 4)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    } label: {
-                        Text("Advanced").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                     }
 
                     HStack {
