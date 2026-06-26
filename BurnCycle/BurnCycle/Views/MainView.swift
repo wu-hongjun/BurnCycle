@@ -246,9 +246,7 @@ struct MainView: View {
                     Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
                     HStack(spacing: 4) {
                         Toggle("Relaunch if killed mid-cycle", isOn: $settings.watchdogEnabled)
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.secondary)
-                            .help("Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
+                        InfoButton(text: "Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
                         Spacer()
                     }
 
@@ -337,9 +335,7 @@ struct MainView: View {
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                                 .disabled(engine.isRunning || !engine.hasCachedPreflight)
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.secondary)
-                                    .help("Before the first Start, BurnCycle flips your outlet off then on to confirm the Shortcut really controls power. That check is reused for 30 minutes. Use this to force a fresh check after moving the plug or changing hubs.")
+                                InfoButton(text: "Before the first Start, BurnCycle flips your outlet off then on to confirm the Shortcut really controls power. That check is reused for 30 minutes. Use this to force a fresh check after moving the plug or changing hubs.")
                                 Spacer()
                             }
                         }
@@ -710,6 +706,34 @@ struct MainView: View {
             return "checkmark.circle"
         case .idle:
             return "moon.fill"
+        }
+    }
+}
+
+/// An `info.circle` icon that reveals help text in a popover on click (reliable,
+/// unlike `.help()` which only shows a slow hover tooltip and ignores clicks).
+/// The hover tooltip is kept too, as a bonus for users who do hover.
+private struct InfoButton: View {
+    let text: String
+    @State private var isShown = false
+
+    var body: some View {
+        Button {
+            isShown.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .foregroundColor(.secondary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(text)
+        .popover(isPresented: $isShown, arrowEdge: .bottom) {
+            Text(text)
+                .font(.caption)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .frame(width: 240)
         }
     }
 }
