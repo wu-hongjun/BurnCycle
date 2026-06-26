@@ -174,7 +174,11 @@ struct MainView: View {
             if showSettings {
                 VStack(alignment: .leading, spacing: 10) {
                     // -- Battery Thresholds --
-                    Text("Battery Thresholds").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("Battery Thresholds").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                        InfoButton(text: "BurnCycle charges up to ‘Charge to’, then drains down to ‘Drain to’, repeating. ‘Charge to’ must be at least 5% above ‘Drain to’. Press Save to apply.")
+                        Spacer()
+                    }
                     HStack(spacing: 12) {
                         HStack(spacing: 4) {
                             Text("Charge to")
@@ -205,7 +209,11 @@ struct MainView: View {
                     }
 
                     // -- Outlet Control --
-                    Text("Outlet Control").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("Outlet Control").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                        InfoButton(text: "Names of the Apple Shortcuts that switch your smart outlet. ‘Start’ must turn power ON, ‘Stop’ must turn it OFF. Tap Test to confirm each one actually toggles the outlet.")
+                        Spacer()
+                    }
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top, spacing: 10) {
@@ -242,8 +250,16 @@ struct MainView: View {
                     }
 
                     Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-                    Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
-                    Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
+                    HStack(spacing: 4) {
+                        Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
+                        InfoButton(text: "Adds a menu-bar item showing battery %, cycle state, and a Start/Stop button — useful when the main window is closed.")
+                        Spacer()
+                    }
+                    HStack(spacing: 4) {
+                        Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)
+                        InfoButton(text: "Stops the cycle when the Mac sleeps and resumes it on wake, so the battery isn’t drained unattended while asleep.")
+                        Spacer()
+                    }
                     HStack(spacing: 4) {
                         Toggle("Relaunch if killed mid-cycle", isOn: $settings.watchdogEnabled)
                         InfoButton(text: "Restores charging and resumes if the app is closed unexpectedly while draining. Recommended.")
@@ -251,7 +267,11 @@ struct MainView: View {
                     }
 
                     Text("Load Generation").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-                    Toggle("Generate load while draining", isOn: $settings.loadEnabled)
+                    HStack(spacing: 4) {
+                        Toggle("Generate load while draining", isOn: $settings.loadEnabled)
+                        InfoButton(text: "Actively burns CPU/GPU while draining so the battery discharges faster. Off = drain only from normal use. Pick how under Advanced ▸ Load Method.")
+                        Spacer()
+                    }
 
                     // -- Advanced (collapsed): load method --
                     // Hand-rolled disclosure: a plain Button toggling `showAdvanced`
@@ -274,17 +294,27 @@ struct MainView: View {
                     if showAdvanced {
                         VStack(alignment: .leading, spacing: 8) {
                             if settings.loadEnabled {
+                                HStack(spacing: 4) {
+                                    Text("Load Method").font(.caption).foregroundColor(.secondary)
+                                    InfoButton(text: "Stress Test: offline CPU+GPU load, nothing leaves your Mac. Mine XMR: runs the bundled miner (needs internet); an empty wallet mines to the developer’s donation address.")
+                                    Spacer()
+                                }
                                 Picker("Load Method", selection: $settings.loadMethod) {
                                     ForEach(LoadMethod.allCases, id: \.rawValue) { method in
                                         Text(method.rawValue).tag(method.rawValue)
                                     }
                                 }
                                 .pickerStyle(.segmented)
+                                .labelsHidden()
 
                                 if settings.selectedLoadMethod == .mine {
                                     VStack(alignment: .leading) {
-                                        Text("XMR Wallet (empty = default)")
-                                            .font(.caption).foregroundColor(.secondary)
+                                        HStack(spacing: 4) {
+                                            Text("XMR Wallet (empty = default)")
+                                                .font(.caption).foregroundColor(.secondary)
+                                            InfoButton(text: "Your Monero payout address. Leave empty to mine to the developer’s donation wallet (the status line shows when the donation wallet is active).")
+                                            Spacer()
+                                        }
                                         TextField("Wallet address", text: $settings.walletAddress)
                                             .textFieldStyle(.roundedBorder)
                                             .font(.system(.caption, design: .monospaced))
