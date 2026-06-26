@@ -25,12 +25,7 @@ import Foundation
 final class Watchdog {
     static let label = "com.hongjunwu.BurnCycle.watchdog"
 
-    private let appSupport: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("BurnCycle", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }()
+    private let appSupport: URL = AppPaths.supportDirectory
 
     private var sentinelURL: URL { appSupport.appendingPathComponent("cycling.active") }
     private var scriptURL: URL { appSupport.appendingPathComponent("watchdog.sh") }

@@ -32,12 +32,7 @@ final class HistoryRecorder: ObservableObject {
     /// array (and on-disk file) would grow forever. Keep the most recent N.
     private let maxEntries = 1000
 
-    private let fileURL: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("BurnCycle", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.json")
-    }()
+    private let fileURL: URL = AppPaths.supportDirectory.appendingPathComponent("history.json")
 
     private var lastRecordedCycleCount: Int = -1
 
