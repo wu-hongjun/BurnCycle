@@ -152,8 +152,10 @@ final class BatteryMonitor: ObservableObject {
         hasBattery = true
 
         // AdapterDetails — only show charger watts when actually plugged in.
+        // Single-key reads via IORegistry.property (F-01/F-02): avoids full-dictionary
+        // allocation every 2s.
         if isPluggedIn,
-           let adapter = fastProperty(service, "AdapterDetails") as? [String: Any],
+           let adapter = IORegistry.property(service, "AdapterDetails") as? [String: Any],
            let watts = adapter["Watts"] as? Int {
             chargerWatts = watts
             adapterName = (adapter["Name"] as? String) ?? "\(watts)W Adapter"
@@ -163,18 +165,18 @@ final class BatteryMonitor: ObservableObject {
         }
 
         // Temperature (centidegrees → °C)
-        if let temp = fastProperty(service, "Temperature") as? Int {
+        if let temp = IORegistry.property(service, "Temperature") as? Int {
             temperature = Double(temp) / 100.0
         }
 
         // Voltage (mV → V)
-        let voltageRaw = fastProperty(service, "Voltage") as? Int
+        let voltageRaw = IORegistry.property(service, "Voltage") as? Int
         if let v = voltageRaw {
             voltage = Double(v) / 1000.0
         }
 
         // Actual charging/discharging power
-        if let amp = fastProperty(service, "Amperage") as? Int, let v = voltageRaw {
+        if let amp = IORegistry.property(service, "Amperage") as? Int, let v = voltageRaw {
             let ampVal = Int64(bitPattern: UInt64(bitPattern: Int64(amp)))
             chargingWatts = abs(Double(ampVal) * Double(v)) / 1_000_000
         } else {
@@ -182,18 +184,9 @@ final class BatteryMonitor: ObservableObject {
         }
 
         // Current capacity in mAh
-        if let raw = fastProperty(service, "AppleRawCurrentCapacity") as? Int {
+        if let raw = IORegistry.property(service, "AppleRawCurrentCapacity") as? Int {
             currentCapacityMAh = raw
         }
-    }
-
-    /// Targeted single-key IORegistry read. Copies only the requested property
-    /// rather than the entire AppleSmartBattery dictionary (F-01/F-02).
-    private func fastProperty(_ service: io_service_t, _ key: String) -> Any? {
-        guard let value = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0) else {
-            return nil
-        }
-        return value.takeRetainedValue()
     }
 
     // MARK: - Slow updates (60s) — cycle count, capacity (IORegistry only, cheap)

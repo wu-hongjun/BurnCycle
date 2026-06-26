@@ -241,26 +241,17 @@ final class SystemMonitor: ObservableObject {
 
         // F-02: read only Voltage and Amperage via targeted IORegistry reads
         // instead of copying the entire AppleSmartBattery dictionary every 3s.
-        guard let voltage = property(service, "Voltage") as? Int else { return }
+        guard let voltage = IORegistry.property(service, "Voltage") as? Int else { return }
 
         let amperage: Int64
-        if let raw = property(service, "Amperage") as? Int64 {
+        if let raw = IORegistry.property(service, "Amperage") as? Int64 {
             amperage = raw
-        } else if let raw = property(service, "Amperage") as? Int {
+        } else if let raw = IORegistry.property(service, "Amperage") as? Int {
             amperage = Int64(bitPattern: UInt64(bitPattern: Int64(raw)))
         } else {
             return
         }
         let watts = abs(Double(amperage) * Double(voltage)) / 1_000_000
         powerWatts = (watts * 10).rounded() / 10
-    }
-
-    /// Targeted single-key IORegistry read (F-02): copies only the requested
-    /// property rather than the full AppleSmartBattery dictionary.
-    private func property(_ service: io_service_t, _ key: String) -> Any? {
-        guard let value = IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0) else {
-            return nil
-        }
-        return value.takeRetainedValue()
     }
 }
