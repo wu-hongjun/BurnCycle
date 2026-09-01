@@ -35,7 +35,9 @@ Load is smart — it auto-throttles when system is already under heavy load (>80
 - **Detailed battery info** — capacity (mAh), Real vs Apple-reported health, serial, voltage, temperature, charger wattage
 - **History tab** — persistent log of cycle count, capacity, and health over time
 - **Real-time monitoring** — battery %, CPU %, GPU % (via IOReport, matches mactop), power draw
-- **Menu-bar mode** — optional `MenuBarExtra` with battery %, state, and Start/Stop, toggled live from Settings
+- **Menu-bar mode** — optional `MenuBarExtra` with CPU load, temperature,
+  battery power, phase ETA, health, cycles, and Start/Stop; battery percentage
+  text can be enabled separately
 - **Liquid Glass icon** — refined for macOS 26 aesthetic
 - **Zero config** — wallet, pool, and xmrig binary all bundled (xmrig is SHA-256-verified at every launch)
 
@@ -97,7 +99,7 @@ setup.
 4. Choose load method (default: Stress Test) and toggle on if desired
 5. Click **Start** (or press ⌘↩) — the app runs a preflight test and begins cycling
 
-Click **Info** for detailed battery data, or **History** to view recorded snapshots over time. Enable **Show in menu bar** in Settings to add a `MenuBarExtra` with battery %, state, and an inline Start/Stop button — useful when the main window is closed.
+Click **Info** for detailed battery data, or **History** to view recorded snapshots over time. Enable **Show in menu bar** in Settings to add a `MenuBarExtra` with a state icon and inline Start/Stop button — useful when the main window is closed. Battery percentage beside the icon is optional and off by default.
 
 After a successful preflight the result is cached for 30 minutes so subsequent Start presses skip the outlet test. Use the **Re-test outlet on next Start** button (Settings ▸ Outlet Control) to invalidate that cache — for example after swapping hubs or moving the plug.
 
@@ -136,7 +138,9 @@ BurnCycle/
 | Method | Stress Test | Stress Test or Mine XMR |
 | Wallet | (built-in) | Custom XMR wallet (empty = developer's donation wallet — see Privacy below) |
 | Start/Stop Shortcuts | "Start Charging" / "Stop Charging" | HomeKit shortcut names |
-| Show in menu bar | OFF | Adds a `MenuBarExtra` with battery %, state, and Start/Stop |
+| Show in menu bar | OFF | Adds a `MenuBarExtra` with a state icon and Start/Stop |
+| Show battery percentage | OFF | Shows battery % beside the menu-bar icon when menu-bar mode is enabled |
+| Hide Dock icon | OFF | Removes the Dock icon while menu-bar mode is enabled |
 | Pause cycling when Mac sleeps | ON | Stops the cycle on sleep, resumes on wake (preflight is skipped on auto-resume) |
 
 ## Privacy & Mining

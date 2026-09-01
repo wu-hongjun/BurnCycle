@@ -130,8 +130,22 @@ struct SettingsPanel: View {
             Text("Behavior").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
             HStack(spacing: 4) {
                 Toggle("Show in menu bar", isOn: $settings.showInMenuBar)
-                InfoButton(text: "Adds a menu-bar item showing battery %, cycle state, and a Start/Stop button — useful when the main window is closed.")
+                InfoButton(text: "Adds a menu-bar item showing cycle state with a Start/Stop popover — useful when the main window is closed.")
                 Spacer()
+            }
+            if settings.showInMenuBar {
+                HStack(spacing: 4) {
+                    Toggle("Show battery percentage", isOn: $settings.showBatteryPercentageInMenuBar)
+                    InfoButton(text: "Shows the current battery percentage beside the BurnCycle menu-bar icon. Off by default for a compact icon.")
+                    Spacer()
+                }
+                .padding(.leading, 18)
+                HStack(spacing: 4) {
+                    Toggle("Hide Dock icon", isOn: $settings.hideDockIcon)
+                    InfoButton(text: "Removes BurnCycle from the Dock while keeping it active in the menu bar. Reopen the window from the menu-bar popover. Quit still closes the entire app.")
+                    Spacer()
+                }
+                .padding(.leading, 18)
             }
             HStack(spacing: 4) {
                 Toggle("Pause cycling when Mac sleeps", isOn: $settings.pauseOnSleep)

@@ -20,6 +20,12 @@ final class AppSettings: ObservableObject {
     @AppStorage("stopChargingShortcut") var stopChargingShortcut: String = "Stop Charging"
     @AppStorage("pauseOnSleep") var pauseOnSleep: Bool = true
     @AppStorage("showInMenuBar") var showInMenuBar: Bool = false
+    /// Controls only the text beside the menu-bar icon. Keep the default label
+    /// compact; users who want an always-visible reading can opt in.
+    @AppStorage("showBatteryPercentageInMenuBar") var showBatteryPercentageInMenuBar: Bool = false
+    /// When menu-bar mode is active, run as an accessory app so BurnCycle does
+    /// not occupy space in the Dock. Ignored unless `showInMenuBar` is also on.
+    @AppStorage("hideDockIcon") var hideDockIcon: Bool = false
 
     /// Crash/termination failsafe. When on, a lightweight LaunchAgent relaunches
     /// BurnCycle if it is killed (jetsam/crash/force-quit) while a cycle is active,

@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-01
+
+### Fixed
+
+- Closing the main window no longer terminates BurnCycle. Cycling and safety
+  monitoring remain active, and the app stays accessible from the menu bar when
+  **Show in menu bar** is enabled.
+- The outlet-testing state now uses an hourglass instead of a checkmark, making
+  it clear that verification is still in progress.
+
 ### Added
+
+- Battery percentage beside the menu-bar icon is now optional and hidden by
+  default; it can be enabled independently in Settings.
+- Added an optional **Hide Dock icon** setting for menu-bar mode. Accessory mode
+  is applied only while the menu-bar item is visible, preventing an inaccessible
+  background app.
+- Redesigned the menu-bar popover as a compact telemetry dashboard showing CPU
+  load, battery temperature, battery power, health, cycles, and an estimated
+  time to the active charge or drain threshold.
 
 - **Crash / termination failsafe.** If BurnCycle is terminated while *draining*
   (smart outlet OFF) — by the macOS memory-pressure killer (jetsam), a crash, or
@@ -145,6 +164,7 @@ The full list — protocol extraction, `decideCycleAction` pure functions,
 
 Initial public release.
 
-[Unreleased]: https://github.com/wu-hongjun/BurnCycle/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/wu-hongjun/BurnCycle/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/wu-hongjun/BurnCycle/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wu-hongjun/BurnCycle/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/wu-hongjun/BurnCycle/releases/tag/v1.0.0

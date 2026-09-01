@@ -151,7 +151,7 @@ struct StatusHeaderView: View {
         case .draining:
             return battery.isPluggedIn ? "exclamationmark.triangle.fill" : "flame.fill"
         case .testing:
-            return "checkmark.circle"
+            return "hourglass"
         case .idle:
             return "moon.fill"
         }

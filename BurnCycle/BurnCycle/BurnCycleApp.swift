@@ -73,6 +73,7 @@ struct BurnCycleApp: App {
     // live (M5). AppServices does not forward settings.objectWillChange, so reading
     // services.settings here would not be reactive at the App level.
     @AppStorage("showInMenuBar") private var showInMenuBar: Bool = false
+    @AppStorage("hideDockIcon") private var hideDockIcon: Bool = false
 
     var body: some Scene {
         Window("BurnCycle", id: "main") {
@@ -86,6 +87,9 @@ struct BurnCycleApp: App {
                 settings: services.settings,
                 history: services.history
             )
+            .onAppear { applyActivationPolicy() }
+            .onChange(of: showInMenuBar) { applyActivationPolicy() }
+            .onChange(of: hideDockIcon) { applyActivationPolicy() }
         }
         .windowResizability(.contentSize)
 
@@ -94,16 +98,32 @@ struct BurnCycleApp: App {
         MenuBarExtra(isInserted: $showInMenuBar) {
             MenuBarPopover(battery: services.battery, engine: services.engine,
                            mining: services.mining, stress: services.stress,
+                           system: services.system,
                            settings: services.settings)
         } label: {
-            MenuBarLabel(battery: services.battery, engine: services.engine)
+            MenuBarLabel(battery: services.battery, engine: services.engine,
+                         settings: services.settings)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    /// Accessory mode removes the Dock icon without terminating the process.
+    /// Require a visible menu-bar item so the app always retains an entry point.
+    private func applyActivationPolicy() {
+        let shouldHideDockIcon = showInMenuBar && hideDockIcon
+        NSApp.setActivationPolicy(shouldHideDockIcon ? .accessory : .regular)
     }
 }
 
 /// Reopen the main window when the dock icon is clicked or app is re-launched.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Closing the last window hides BurnCycle's window; it must not terminate
+    /// the process. This is especially important when the menu-bar extra is
+    /// enabled, because cycling and safety monitoring continue from there.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     /// Bring an existing window forward when the user re-activates the app with
     /// no visible windows (Dock click, second launch) — without this, clicking
     /// the Dock icon does nothing once the main window has been closed.

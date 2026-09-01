@@ -101,12 +101,23 @@ while asleep (M-2).
 | Setting | UserDefaults key | Default | Description |
 |---------|------------------|---------|-------------|
 | Show in menu bar | `showInMenuBar` | `false` | Reactive — toggling inserts/removes `MenuBarExtra` live |
+| Show battery percentage | `showBatteryPercentageInMenuBar` | `false` | Shows battery % beside the menu-bar state icon |
+| Hide Dock icon | `hideDockIcon` | `false` | Uses accessory mode while the menu-bar item is enabled |
 | Pause cycling when Mac sleeps | `pauseOnSleep` | `true` | Stop on sleep; auto-resume ~2 s after wake if we were cycling |
 
 `showInMenuBar` is mirrored at the `App` level via `@AppStorage("showInMenuBar")`
 so SwiftUI re-evaluates the scene when it changes — observing
 `services.settings` from the App body would not be reactive because
 `AppServices` does not forward `settings.objectWillChange` (M5).
+
+`showBatteryPercentageInMenuBar` controls only the text beside the state icon.
+It defaults to `false` for a compact menu-bar item and remains available in the
+popover regardless of this setting.
+
+`hideDockIcon` switches `NSApplication` to accessory activation policy, which
+removes the Dock icon without terminating BurnCycle. It is applied only while
+`showInMenuBar` is also `true`, ensuring the app always retains a visible entry
+point. The main window can be reopened from the menu-bar popover.
 
 `pauseOnSleep` only arms a fast-resume when the engine was actually cycling
 (`.charging` or `.draining`). If sleep happens while still in preflight
