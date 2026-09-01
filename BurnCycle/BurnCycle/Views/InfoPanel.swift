@@ -26,6 +26,9 @@ struct InfoPanel: View {
             } else {
                 infoRow("Battery Output", String(format: "%.1f W", battery.chargingWatts))
             }
+            Divider()
+                .padding(.vertical, 2)
+            infoRow("BurnCycle Version", versionText)
         }
         .font(.caption)
         .padding(.top, 4)
@@ -39,5 +42,14 @@ struct InfoPanel: View {
             Text(value)
                 .fontWeight(.medium)
         }
+    }
+
+    /// Prefer the human-facing release version, appending a distinct build
+    /// number when distribution packaging uses one.
+    private var versionText: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty || build == version ? version : "\(version) (\(build))"
     }
 }

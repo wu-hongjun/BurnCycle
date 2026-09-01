@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The Info panel now shows the installed BurnCycle version and distinct build
+  number when present.
+
 ## [1.2.0] — 2026-09-01
 
 ### Fixed
