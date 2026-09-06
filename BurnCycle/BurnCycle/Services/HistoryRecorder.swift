@@ -6,13 +6,21 @@ struct HistoryEntry: Codable, Identifiable {
     let cycleCount: Int
     let fullChargeCapacityMAh: Int
     let healthPercent: Int
+    /// Serial of the battery pack this snapshot came from. Optional because
+    /// entries written before this field existed have no serial (synthesized
+    /// Codable decodes a missing key as nil, so old history.json files still
+    /// load); the replacement heuristic in `currentBatteryEntries` does not
+    /// depend on it.
+    let batterySerial: String?
 
-    init(timestamp: Date, cycleCount: Int, fullChargeCapacityMAh: Int, healthPercent: Int) {
+    init(timestamp: Date, cycleCount: Int, fullChargeCapacityMAh: Int, healthPercent: Int,
+         batterySerial: String? = nil) {
         self.id = UUID()
         self.timestamp = timestamp
         self.cycleCount = cycleCount
         self.fullChargeCapacityMAh = fullChargeCapacityMAh
         self.healthPercent = healthPercent
+        self.batterySerial = batterySerial
     }
 }
 
@@ -40,11 +48,36 @@ final class HistoryRecorder: ObservableObject {
         load()
     }
 
+    /// Entries belonging to the battery currently installed, in recorded order.
+    ///
+    /// A battery replacement resets the hardware cycle count, so the history
+    /// array becomes two (or more) unrelated series stitched end to end. The
+    /// chart must only plot the latest one, otherwise the last point of the old
+    /// pack draws a line straight back to cycle 1 and the auto-zoomed axes
+    /// squash the real trend into a band.
+    ///
+    /// The segment boundary is any entry whose cycle count is *lower* than the
+    /// one before it (cycle counts never decrease within one pack). When both
+    /// neighbours carry a serial, a serial change is also a boundary — this
+    /// catches a replacement pack that happened to arrive with a higher count.
+    var currentBatteryEntries: [HistoryEntry] {
+        guard !entries.isEmpty else { return [] }
+        var start = entries.count - 1
+        while start > 0 {
+            let prev = entries[start - 1], cur = entries[start]
+            if cur.cycleCount < prev.cycleCount { break }
+            if let a = prev.batterySerial, let b = cur.batterySerial, a != b { break }
+            start -= 1
+        }
+        return Array(entries[start...])
+    }
+
     /// Called whenever battery slow values change.
     /// Records a snapshot when:
     ///  - First valid observation ever (no entries yet)
     ///  - Cycle count differs from the last recorded entry
-    func observe(cycleCount: Int, fullChargeCapacityMAh: Int, healthPercent: Int) {
+    func observe(cycleCount: Int, fullChargeCapacityMAh: Int, healthPercent: Int,
+                 batterySerial: String? = nil) {
         guard cycleCount > 0, fullChargeCapacityMAh > 0, healthPercent > 0 else { return }
 
         let isFirstEver = entries.isEmpty
@@ -53,7 +86,8 @@ final class HistoryRecorder: ObservableObject {
         if isFirstEver || cycleChanged {
             let entry = HistoryEntry(timestamp: Date(), cycleCount: cycleCount,
                                      fullChargeCapacityMAh: fullChargeCapacityMAh,
-                                     healthPercent: healthPercent)
+                                     healthPercent: healthPercent,
+                                     batterySerial: batterySerial)
             entries.append(entry)
             if entries.count > maxEntries {
                 entries.removeFirst(entries.count - maxEntries)

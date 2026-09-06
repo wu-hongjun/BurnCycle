@@ -54,9 +54,12 @@ final class AppServices: ObservableObject {
                            battery.$fullChargeCapacityMAh.removeDuplicates())
             .sink { [weak self] cycle, health, capacity in
                 Task { @MainActor in
-                    self?.history.observe(cycleCount: cycle,
-                                          fullChargeCapacityMAh: capacity,
-                                          healthPercent: health)
+                    guard let self else { return }
+                    let serial = self.battery.serial
+                    self.history.observe(cycleCount: cycle,
+                                         fullChargeCapacityMAh: capacity,
+                                         healthPercent: health,
+                                         batterySerial: serial.isEmpty ? nil : serial)
                 }
             }
     }
