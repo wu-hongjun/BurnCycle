@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Info panel now shows the installed BurnCycle version and distinct build
   number when present.
+- History entries now record the battery serial, so a future pack swap is
+  detected even when the new pack's cycle count does not reset.
+
+### Fixed
+
+- The History chart no longer draws a line from the old battery's last cycle
+  back to cycle 1 after a battery replacement. Only the currently installed
+  pack is plotted (the table still lists every entry), so the axes auto-zoom to
+  the real trend instead of being dominated by the new pack's 100% outlier.
 
 ## [1.2.0] — 2026-09-01
 

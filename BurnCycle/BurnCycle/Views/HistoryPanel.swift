@@ -12,6 +12,12 @@ struct HistoryPanel: View {
     /// History-chart entry currently under the cursor (nil when not hovering).
     @State private var hoverEntry: HistoryEntry?
 
+    /// Entries plotted by the chart: only the currently installed battery. After
+    /// a replacement the cycle count resets, and plotting the whole array would
+    /// draw the old pack's last point straight back to cycle 1 and let the
+    /// outlier dominate the auto-zoomed axes. The table below still lists all.
+    private var chartEntries: [HistoryEntry] { history.currentBatteryEntries }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Chart of health % (left axis) and full-charge capacity in mAh
@@ -22,7 +28,7 @@ struct HistoryPanel: View {
             // in the health axis' coordinate space (see capacityToHealthScale)
             // so a single chart keeps both series perfectly aligned, with the
             // trailing axis de-normalizing the ticks back to mAh.
-            if history.entries.count >= 2 {
+            if chartEntries.count >= 2 {
                 // Hover readout — reflects the entry under the cursor. Fixed
                 // height so the layout doesn't jump as it appears/clears.
                 HStack(spacing: 8) {
@@ -43,7 +49,7 @@ struct HistoryPanel: View {
                 .frame(height: 14)
 
                 Chart {
-                    ForEach(history.entries) { entry in
+                    ForEach(chartEntries) { entry in
                         LineMark(
                             x: .value("Cycle", entry.cycleCount),
                             y: .value("Health %", Double(entry.healthPercent)),
@@ -188,7 +194,7 @@ struct HistoryPanel: View {
 
     /// Auto-zoom Y axis around recorded health values for clearer trend visibility
     private var chartHealthDomain: ClosedRange<Int> {
-        let values: [Int] = history.entries.map { $0.healthPercent }
+        let values: [Int] = chartEntries.map { $0.healthPercent }
         guard let lo = values.min(), let hi = values.max() else { return 0...100 }
         let pad: Int = max(2, (hi - lo) / 4)
         return max(0, lo - pad)...min(100, hi + pad)
@@ -196,7 +202,7 @@ struct HistoryPanel: View {
 
     /// X axis range — starts at the smallest recorded cycle, not 0
     private var chartCycleDomain: ClosedRange<Int> {
-        let values: [Int] = history.entries.map { $0.cycleCount }
+        let values: [Int] = chartEntries.map { $0.cycleCount }
         guard let lo = values.min(), let hi = values.max() else { return 0...1 }
         // If only one unique cycle value, pad so the line is visible
         if lo == hi { return (lo - 1)...(hi + 1) }
@@ -207,7 +213,7 @@ struct HistoryPanel: View {
     /// Auto-zoomed mAh range for the capacity (right) axis. Padded so the trend
     /// fills the plot rather than hugging an edge.
     private var chartCapacityDomain: ClosedRange<Int> {
-        let values: [Int] = history.entries.map { $0.fullChargeCapacityMAh }
+        let values: [Int] = chartEntries.map { $0.fullChargeCapacityMAh }
         guard let lo = values.min(), let hi = values.max() else { return 0...1 }
         if lo == hi { return (lo - 10)...(hi + 10) }
         let pad: Int = max(5, (hi - lo) / 4)
@@ -237,6 +243,6 @@ struct HistoryPanel: View {
 
     /// Entry whose cycle count is closest to `cycle` (the hovered x position).
     private func nearestEntry(toCycle cycle: Int) -> HistoryEntry? {
-        history.entries.min(by: { abs($0.cycleCount - cycle) < abs($1.cycleCount - cycle) })
+        chartEntries.min(by: { abs($0.cycleCount - cycle) < abs($1.cycleCount - cycle) })
     }
 }
